@@ -30,10 +30,10 @@ func (mount *Mountpoint) Read() chan []byte {
 		buf := make([]byte, 4096)
 		nbytes, err := mount.Source.Request.Body.Read(buf)
 		if err != nil {
-			data<-nil
+			data <- nil
 			return
 		}
-		data<-buf[:nbytes]
+		data <- buf[:nbytes]
 	}()
 	return data
 }

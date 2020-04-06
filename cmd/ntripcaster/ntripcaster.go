@@ -1,12 +1,12 @@
 package main
 
 import (
-       "flag"
-       log "github.com/sirupsen/logrus"
-       "github.com/go-gnss/ntrip/caster"
-       "github.com/go-gnss/ntrip/caster/authorizers"
-       "github.com/spf13/viper"
-       "time"
+	"flag"
+	"github.com/go-gnss/ntrip/caster"
+	"github.com/go-gnss/ntrip/caster/authorizers"
+	log "github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
+	"time"
 )
 
 func main() {
