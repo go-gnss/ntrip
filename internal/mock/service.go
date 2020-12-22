@@ -1,8 +1,5 @@
 package mock
 
-// TODO: Could probably live in a separate package - maybe in the service package if it were
-//  separated from the NTRIP package
-
 import (
 	"context"
 	"io"
@@ -32,7 +29,7 @@ func (m *MockSourceService) Sourcetable() string {
 	return "CAS;localhost;2101;local;local;0;AUS;-1.0;1.0"
 }
 
-func (m *MockSourceService) Subscriber(ctx context.Context, mount string, username string, password string) (chan []byte, error) {
+func (m *MockSourceService) Subscriber(ctx context.Context, mount, username, password string) (chan []byte, error) {
 	if username != Username || password != Password {
 		return nil, ntrip.ErrorNotAuthorized
 	}
