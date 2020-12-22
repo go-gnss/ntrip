@@ -12,8 +12,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// Test running Caster with mock service using httptest.Server, which is close to actually calling caster.ListenAndServe()
-// Write data with v2 server and read with v2 and v1 clients
+// Test running Caster with mock service using httptest.Server, which is close to actually calling
+//  caster.ListenAndServe(), write data with v2 server and read with v2 and v1 clients
 func TestCasterServerClient(t *testing.T) {
 	caster := ntrip.NewCaster("N/A", mock.NewMockSourceService(), logrus.StandardLogger())
 	ts := httptest.NewServer(caster.Handler)
@@ -37,10 +37,11 @@ func TestCasterServerClient(t *testing.T) {
 	}
 
 	testV2Client(t, ts.URL+mock.MountPath, w)
-	// The request's context may not get closed in the server before the next Write occurs, resulting in the
-	// mock writing to the first connected client's Body
+
+	// POST request's context may not get closed in the server before the next Write occurs,
+	// resulting in the mock writing to the first connected client's Body
 	// Nothing like a 10ms timeout to fix a bit of non-deterministic behaviour
-	// TODO: Could fix this by rewriting the mock service, or using the inmemory SourceService instead
+	// TODO: Could fix this by rewriting the mock service, or using the inmemory SourceService
 	time.Sleep(10 * time.Millisecond)
 
 	testV1Client(t, ts.URL[7:], mock.MountPath, w)

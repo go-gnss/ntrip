@@ -25,22 +25,21 @@ func init() {
 	logger.Level = logrus.DebugLevel
 }
 
-// HijackableResponseRecorder wraps httptest.ResponseRecorder in order to implement the http.Hijacker
+// HijackableResponseRecorder wraps httptest.ResponseRecorder to implement the http.Hijacker
 // interface which is needed to test NTRIP v1 requests
 // TODO: Move to another package?
-// TODO: This doesn't prevent the server from writing to the original response Body, which http.Server
-//  would do for a real request
+// TODO: This doesn't prevent the server from writing to the original response Body, which
+//  http.Server would do for a real request - this case is tested by caster_test.go
 type HijackableResponseRecorder struct {
 	*httptest.ResponseRecorder
 }
 
 func (h *HijackableResponseRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	_, conn := net.Pipe() // ntrip package only calls Close on the net.Conn
+	_, conn := net.Pipe()
 	rw := bufio.NewReadWriter(bufio.NewReader(h.Body), bufio.NewWriter(h.Body))
 	return conn, rw, nil
 }
 
-// Uses
 func TestCasterHandlers(t *testing.T) {
 	v1Sourcetable := fmt.Sprintf("SOURCETABLE 200 OK\r\n%s", mock.NewMockSourceService().Sourcetable())
 	v2Sourcetable := mock.NewMockSourceService().Sourcetable()
@@ -86,20 +85,21 @@ func TestCasterHandlers(t *testing.T) {
 		req.SetBasicAuth(tc.Username, tc.Password)
 
 		rr := &HijackableResponseRecorder{httptest.NewRecorder()}
-		// v1 responses don't actually return a code, but the httptest.ResponseRecorder default is 200
-		// which would lead to false positives without setting rr.Code to something else
+		// v1 responses don't actually return a code, but the httptest.ResponseRecorder default is
+		// 200 which would lead to false positives without setting rr.Code to something else
 		rr.Code = 0
 
 		ms := mock.NewMockSourceService()
 
-		// Write tc.ChannelData to ms.DataChannel for GET requests so they receive data in the response Body
+		// Write tc.ChannelData to ms.DataChannel for GET requests so they receive data in the
+		// response Body
 		if tc.RequestMethod == http.MethodGet {
 			ms.DataChannel = make(chan []byte, 1)
 			ms.DataChannel <- []byte(tc.ChannelData)
-			// Close the channel once the client reads from it so we don't have to wait for client timeouts
+			// Close channel once client reads from it so we don't have to wait for client timeouts
 			// TODO: These will only be closed by successful GET test cases, does this matter?
 			go func() {
-				// The channel is size 1, so this will block until the GET request client reads from the channel
+				// The channel is size 1, so this will block until the GET request client reads
 				ms.DataChannel <- []byte{}
 				close(ms.DataChannel)
 			}()
@@ -174,7 +174,7 @@ func TestAsyncPublishSubscribe(t *testing.T) {
 		caster := ntrip.NewCaster("N/A", ms, logger)
 
 		serverDone := asyncServer(t, tc.TestName, caster, tc.WriteData)
-		// TODO: Must be a better way to wait for POST request to connect - maybe just implement a retry
+		// TODO: Better way to wait for POST request to connect - maybe just implement a retry
 		time.Sleep(10 * time.Millisecond)
 
 		getReq, _ := http.NewRequest(http.MethodGet, mock.MountPath, strings.NewReader(""))

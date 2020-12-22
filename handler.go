@@ -33,7 +33,7 @@ func (h *handler) handleRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 // NTRIP v1 is not valid HTTP, so the underlying socket must be hijacked from the HTTP library
-// Would need to use net.Listen instead of http.Server to support v1 SOURCE requests (equivalent to POST)
+// Would need to use net.Listen instead of http.Server to support v1 SOURCE requests
 func (h *handler) handleRequestV1(w http.ResponseWriter, r *http.Request) {
 	// Can only support NTRIP v1 GET requests with http.Server
 	if r.Method != http.MethodGet {
@@ -45,7 +45,7 @@ func (h *handler) handleRequestV1(w http.ResponseWriter, r *http.Request) {
 	hj, ok := w.(http.Hijacker)
 	if !ok {
 		h.logger.Error("server does not implement hijackable response writers, cannot support NTRIP v1")
-		// There is no NTRIP v1 response to signal server failure, so this is probably the most useful
+		// There is no NTRIP v1 response to signal failure, so this is probably the most useful
 		http.Error(w, "", http.StatusInternalServerError)
 		return
 	}
@@ -104,7 +104,7 @@ func (h *handler) handleGetMountV1(w *bufio.ReadWriter, r *http.Request) {
 	}
 
 	// TODO: Check error in Write and Flush
-	w.Write([]byte("ICY 200 OK\r\n")) // NTRIP is ICECAST, this is the equivalent of HTTP 200 OK response
+	w.Write([]byte("ICY 200 OK\r\n")) // NTRIP v1 is ICECAST, this is the equivalent of HTTP 200 OK
 	w.Flush()
 	h.logger.Infof("accepted request")
 
@@ -195,7 +195,8 @@ func (h *handler) handleGetMountV2(w http.ResponseWriter, r *http.Request) error
 	w.(http.Flusher).Flush()
 	h.logger.Infof("accepted request")
 
-	// bufio.ReadWriter's Flush method (used by v1 handler) returns an error so does not satisfy http.Flusher
+	// bufio.ReadWriter's Flush method (used by v1 handler) returns error so does not satisfy the
+	// http.Flusher interface
 	flush := func() error {
 		// TODO: Check if cast succeeds and return error if not
 		w.(http.Flusher).Flush()
@@ -231,7 +232,7 @@ func write(ctx context.Context, c chan []byte, w io.Writer, flush func() error) 
 
 // Spec says that WWW-Authenticate header is required for casters
 func writeUnauthorizedV1(w io.Writer, r *http.Request) error {
-	// TODO: Not sure about the HTTP version
+	// TODO: Not sure about setting the HTTP version
 	// TODO: Check for errors writing and flushing
 	resp := http.Response{
 		StatusCode: http.StatusUnauthorized,
@@ -242,6 +243,5 @@ func writeUnauthorizedV1(w io.Writer, r *http.Request) error {
 		},
 		Close: true,
 	}
-	//fmt.Fprintf(w, "HTTP/1.1 401 Unauthorized\r\nDate: %s\r\nWWW-Authenticate: Basic realm=%q\r\nConnection: close\r\n\r\n", time.Now().UTC().Format(http.TimeFormat), r.URL.Path)
 	return resp.Write(w)
 }

@@ -12,7 +12,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// It's expected that SourceService implementations will use these errors to signal specific failures.
+// It's expected that SourceService implementations will use these errors to signal specific
+// failures.
 // TODO: Could use some kind of response code enum type rather than errors?
 var (
 	ErrorNotAuthorized error = fmt.Errorf("request not authorized")
@@ -23,7 +24,8 @@ var (
 // SourceService represents a provider of stream data
 type SourceService interface {
 	Sourcetable() string // TODO: return ntrip.Sourcetable so we can implement filtering to spec
-	// TODO: Specifying username and password may be limiting, could instead take the content of the auth header
+	// TODO: Specifying username and password may be limiting, could instead take the content of
+	//  the auth header
 	Publisher(ctx context.Context, mount, username, password string) (io.WriteCloser, error)
 	Subscriber(ctx context.Context, mount, username, password string) (chan []byte, error)
 }
@@ -33,20 +35,23 @@ type Caster struct {
 	http.Server
 }
 
+// NewCaster constructs a Caster, setting up the Handler and timeouts - run using ListenAndServe()
 // TODO: Consider not constructing the http.Server, and leaving Caster as a http.Handler
-//  Then the caller can create other routes on the server, such as (for example) a /health endpoint, or a /stats endpoint
-//  Though we could instead run those on a separate http.Server
-//  Also, middleware can be added to a Caster by doing `caster.Handler = someMiddleware(caster.Handler)`
+//  Then the caller can create other routes on the server, such as (for example) a /health endpoint,
+//  or a /stats endpoint - Though those could instead be run on separate http.Server's
+//  Also, middleware can be added to a Caster by doing `c.Handler = someMiddleware(c.Handler)`
 func NewCaster(addr string, svc SourceService, logger *logrus.Logger) *Caster {
 	return &Caster{
 		http.Server{
-			Addr:    addr,
-			Handler: getHandler(svc, logger),
-			// Read timeout kills publishing connections because they don't necessarily read from the response body
-			//ReadTimeout: 10 * time.Second,
-			// Write timeout kills subscriber connections because they don't write to the request body
-			//WriteTimeout: 10 * time.Second,
+			Addr:        addr,
+			Handler:     getHandler(svc, logger),
 			IdleTimeout: 10 * time.Second,
+			// Read timeout kills publishing connections because they don't necessarily read from
+			// the response body
+			//ReadTimeout: 10 * time.Second,
+			// Write timeout kills subscriber connections because they don't write to the request
+			// body
+			//WriteTimeout: 10 * time.Second,
 		},
 	}
 }
