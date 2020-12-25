@@ -4,10 +4,44 @@ import (
 	"fmt"
 )
 
-// TODO: Sourcetable type
+// Sourcetable for NTRIP Casters, returned at / as a way for users to discover available mounts
+type Sourcetable struct {
+	Casters  []CasterEntry
+	Networks []NetworkEntry
+	Mounts   []MountEntry
+}
 
-// Mount represents a NTRIP mountpoint
-type Mount struct {
+// CasterEntry for an NTRIP Sourcetable
+type CasterEntry struct {
+	Host                string
+	Port                int
+	Identifier          string
+	Operator            string
+	NMEA                bool
+	Country             string
+	Latitude            float32
+	Longitude           float32
+	FallbackHostAddress string
+	FallbackHostPort    int
+	Misc                string
+}
+
+// NetworkEntry for an NTRIP Sourcetable
+type NetworkEntry struct {
+	Identifier string
+	Operator   string
+	// TODO: Authentication type - spec says: B, D, N or a comma separated list of these
+	Authentication string
+	Fee            bool
+	NetworkInfoURL string
+	StreamInfoURL  string
+	// RegistrationAddress is either a URL or Email address
+	RegistrationAddress string
+	Misc                string
+}
+
+// MountEntry for an NTRIP Sourcetable
+type MountEntry struct {
 	Name          string
 	Identifier    string
 	Format        string
@@ -22,7 +56,7 @@ type Mount struct {
 	Solution      bool
 	Generator     string
 	Compression   string
-	// TODO: Authentication type - spec says: B, D, N or a comma separated list of these
+	// TODO: Authentication type
 	Authentication string
 	Fee            bool
 	Bitrate        int
@@ -30,7 +64,7 @@ type Mount struct {
 }
 
 // String representation of Mount in NTRIP Sourcetable entry format
-func (m Mount) String() string {
+func (m MountEntry) String() string {
 	nmea := "0"
 	if m.NMEA {
 		nmea = "1"
