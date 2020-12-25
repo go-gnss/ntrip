@@ -12,6 +12,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// TODO: Test failure cases with httptest.Server
+
 // Test running Caster with mock service using httptest.Server, which is close to actually calling
 //  caster.ListenAndServe(), write data with v2 server and read with v2 and v1 clients
 func TestCasterServerClient(t *testing.T) {

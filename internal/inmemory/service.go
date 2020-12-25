@@ -9,6 +9,7 @@ import (
 	"github.com/go-gnss/ntrip"
 )
 
+// SourceService is a simple in-memory implementation of ntrip.SourceService
 type SourceService struct {
 	sync.RWMutex
 	mounts map[string][]io.Writer
