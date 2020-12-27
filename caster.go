@@ -40,7 +40,7 @@ type Caster struct {
 //  Then the caller can create other routes on the server, such as (for example) a /health endpoint,
 //  or a /stats endpoint - Though those could instead be run on separate http.Server's
 //  Also, middleware can be added to a Caster by doing `c.Handler = someMiddleware(c.Handler)`
-func NewCaster(addr string, svc SourceService, logger *logrus.Logger) *Caster {
+func NewCaster(addr string, svc SourceService, logger logrus.FieldLogger) *Caster {
 	return &Caster{
 		http.Server{
 			Addr:        addr,
@@ -59,7 +59,7 @@ func NewCaster(addr string, svc SourceService, logger *logrus.Logger) *Caster {
 // Wraps handler in a http.Handler - this is done instead of making handler implement the
 // http.Handler interface so that a new handler can be constructed for each request
 // TODO: See TODO on handler type about changing the name
-func getHandler(svc SourceService, logger *logrus.Logger) http.Handler {
+func getHandler(svc SourceService, logger logrus.FieldLogger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestVersion := 1
 		if strings.ToUpper(r.Header.Get(NTRIPVersionHeaderKey)) == NTRIPVersionHeaderValueV2 {

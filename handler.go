@@ -19,7 +19,7 @@ import (
 // TODO: Separate package (in internal)?
 type handler struct {
 	svc    SourceService
-	logger *logrus.Entry
+	logger logrus.FieldLogger
 }
 
 func (h *handler) handleRequest(w http.ResponseWriter, r *http.Request) {
