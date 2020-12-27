@@ -11,6 +11,22 @@ type Sourcetable struct {
 	Mounts   []MountEntry
 }
 
+func (st Sourcetable) String() (s string) {
+	for _, cas := range st.Casters {
+		s = fmt.Sprintf("%s%s\n", s, cas)
+	}
+
+	for _, net := range st.Networks {
+		s = fmt.Sprintf("%s%s\n", s, net)
+	}
+
+	for _, str := range st.Mounts {
+		s = fmt.Sprintf("%s%s\n", s, str)
+	}
+
+	return s
+}
+
 // CasterEntry for an NTRIP Sourcetable
 type CasterEntry struct {
 	Host                string
@@ -24,6 +40,17 @@ type CasterEntry struct {
 	FallbackHostAddress string
 	FallbackHostPort    int
 	Misc                string
+}
+
+func (c CasterEntry) String() string {
+	nmea := "0"
+	if c.NMEA {
+		nmea = "1"
+	}
+
+	return fmt.Sprintf("CAS;%s;%d;%s;%s;%s;%s;%.4f;%.4f;%s;%d;%s",
+		c.Host, c.Port, c.Identifier, c.Operator, nmea, c.Country, c.Latitude, c.Longitude,
+		c.FallbackHostAddress, c.FallbackHostPort, c.Misc)
 }
 
 // NetworkEntry for an NTRIP Sourcetable
@@ -40,6 +67,17 @@ type NetworkEntry struct {
 	Misc                string
 }
 
+func (n NetworkEntry) String() string {
+	fee := "N"
+	if n.Fee {
+		fee = "Y"
+	}
+
+	return fmt.Sprintf("NET;%s;%s;%s;%s;%s;%s;%s;%s",
+		n.Identifier, n.Operator, n.Authentication, fee, n.NetworkInfoURL, n.StreamInfoURL,
+		n.RegistrationAddress, n.Misc)
+}
+
 // MountEntry for an NTRIP Sourcetable
 type MountEntry struct {
 	Name          string
@@ -50,8 +88,8 @@ type MountEntry struct {
 	NavSystem     string
 	Network       string
 	CountryCode   string
-	Latitude      string
-	Longitude     string
+	Latitude      float32
+	Longitude     float32
 	NMEA          bool
 	Solution      bool
 	Generator     string
@@ -80,7 +118,7 @@ func (m MountEntry) String() string {
 		fee = "Y"
 	}
 
-	return fmt.Sprintf("STR;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%d;%s",
+	return fmt.Sprintf("STR;%s;%s;%s;%s;%s;%s;%s;%s;%.4f;%.4f;%s;%s;%s;%s;%s;%s;%d;%s",
 		m.Name, m.Identifier, m.Format, m.FormatDetails, m.Carrier, m.NavSystem, m.Network,
 		m.CountryCode, m.Latitude, m.Longitude, nmea, solution, m.Generator, m.Compression,
 		m.Authentication, fee, m.Bitrate, m.Misc)

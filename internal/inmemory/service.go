@@ -28,7 +28,7 @@ func (ss *SourceService) Sourcetable() string {
 	ss.RLock()
 	defer ss.RUnlock()
 	for mount := range ss.mounts {
-		st = fmt.Sprintf("%s%s\r\n", st, ntrip.Mount{Name: mount})
+		st = fmt.Sprintf("%s%s\r\n", st, ntrip.MountEntry{Name: mount})
 	}
 	return st
 }
