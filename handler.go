@@ -186,6 +186,7 @@ func (h *handler) handleGetMountV2(w http.ResponseWriter, r *http.Request) error
 	username, password, _ := r.BasicAuth()
 	sub, err := h.svc.Subscriber(r.Context(), r.URL.Path[1:], username, password)
 	if err != nil {
+		h.logger.Infof("connection refused with reason: %s", err)
 		return err
 	}
 
