@@ -11,7 +11,7 @@ import (
 
 // SourceService is a simple in-memory implementation of ntrip.SourceService
 type SourceService struct {
-	sync.RWMutex
+	sync.Mutex
 	ST     ntrip.Sourcetable
 	mounts map[string][]io.Writer
 	auth   Authoriser
@@ -82,8 +82,8 @@ func (ss *SourceService) Subscriber(ctx context.Context, mount, username, passwo
 		return nil, ntrip.ErrorNotAuthorized
 	}
 
-	ss.RLock()
-	defer ss.RUnlock()
+	ss.Lock()
+	defer ss.Unlock()
 
 	mw, ok := ss.mounts[mount]
 	if !ok {
