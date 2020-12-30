@@ -12,9 +12,9 @@ import (
 // SourceService is a simple in-memory implementation of ntrip.SourceService
 type SourceService struct {
 	sync.Mutex
-	ST     ntrip.Sourcetable
-	mounts map[string][]io.Writer
-	auth   Authoriser
+	Sourcetable ntrip.Sourcetable
+	mounts      map[string][]io.Writer
+	auth        Authoriser
 }
 
 func NewSourceService(auth Authoriser) *SourceService {
@@ -24,9 +24,9 @@ func NewSourceService(auth Authoriser) *SourceService {
 	}
 }
 
-func (ss *SourceService) Sourcetable() string {
+func (ss *SourceService) GetSourcetable() ntrip.Sourcetable {
 	// TODO: Only include online Mounts in output
-	return ss.ST.String()
+	return ss.Sourcetable
 }
 
 func (ss *SourceService) Publisher(ctx context.Context, mount, username, password string) (io.WriteCloser, error) {

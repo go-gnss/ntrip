@@ -72,7 +72,7 @@ func (h *handler) handleRequestV1(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) handleGetSourcetableV1(w *bufio.ReadWriter, r *http.Request) {
-	_, err := fmt.Fprintf(w, "SOURCETABLE 200 OK\r\n%s", h.svc.Sourcetable())
+	_, err := fmt.Fprintf(w, "SOURCETABLE 200 OK\r\n%s", h.svc.GetSourcetable())
 	if err != nil {
 		h.logger.Errorf("error writing sourcetable to client: %s", err)
 		return
@@ -148,7 +148,7 @@ func (h *handler) handleRequestV2(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) handleGetSourcetableV2(w http.ResponseWriter, r *http.Request) {
-	_, err := fmt.Fprintf(w, h.svc.Sourcetable())
+	_, err := fmt.Fprintf(w, h.svc.GetSourcetable().String())
 	if err != nil {
 		h.logger.Warnf("error writing sourcetable to client: %s", err)
 		return

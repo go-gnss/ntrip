@@ -2,7 +2,6 @@ package ntrip
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -12,20 +11,14 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// It's expected that SourceService implementations will use these errors to signal specific
-// failures.
-// TODO: Could use some kind of response code enum type rather than errors?
-var (
-	ErrorNotAuthorized error = fmt.Errorf("request not authorized")
-	ErrorNotFound      error = fmt.Errorf("mount not found")
-	ErrorConflict      error = fmt.Errorf("mount in use")
-)
-
 // SourceService represents a provider of stream data
 type SourceService interface {
-	Sourcetable() string // TODO: return ntrip.Sourcetable so we can implement filtering to spec
+	GetSourcetable() Sourcetable
 	// TODO: Specifying username and password may be limiting, could instead take the content of
 	//  the auth header
+	// TODO: A SourceService implementation can't support nearest base functionality because it
+	//  wouldn't have access to NMEA headers - in general, it may be arbitrarily limiting to not
+	//  pass the http.Request object (leaving it up to the implementation to parse headers etc.)
 	Publisher(ctx context.Context, mount, username, password string) (io.WriteCloser, error)
 	Subscriber(ctx context.Context, mount, username, password string) (chan []byte, error)
 }

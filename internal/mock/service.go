@@ -15,18 +15,34 @@ const (
 	Password  string = "password"
 )
 
-// MockSourceService implements ntrip.SourceService, copying data from a single connected
-// server (TEST00AUS0) into a channel
+var ()
+
+// MockSourceService implements ntrip.SourceService, copying data from a single connected server
+// (mount name TEST00AUS0) into a channel
 type MockSourceService struct {
 	DataChannel chan []byte
+	Sourcetable ntrip.Sourcetable
 }
 
 func NewMockSourceService() *MockSourceService {
-	return &MockSourceService{}
+	return &MockSourceService{
+		Sourcetable: ntrip.Sourcetable{
+			Casters: []ntrip.CasterEntry{
+				{
+					Host:       "localhost",
+					Port:       2101,
+					Identifier: "local",
+					Country:    "AUS",
+					Latitude:   -1.0,
+					Longitude:  1.0,
+				},
+			},
+		},
+	}
 }
 
-func (m *MockSourceService) Sourcetable() string {
-	return "CAS;localhost;2101;local;local;0;AUS;-1.0;1.0"
+func (m *MockSourceService) GetSourcetable() ntrip.Sourcetable {
+	return m.Sourcetable
 }
 
 func (m *MockSourceService) Subscriber(ctx context.Context, mount, username, password string) (chan []byte, error) {
