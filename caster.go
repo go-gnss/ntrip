@@ -59,8 +59,11 @@ func getHandler(svc SourceService, logger logrus.FieldLogger) http.Handler {
 			requestVersion = 2
 		}
 
+		requestID := uuid.New().String()
+		ctx := context.WithValue(r.Context(), RequestIDContextKey, requestID)
+
 		l := logger.WithFields(logrus.Fields{
-			"request_id":      uuid.New().String(),
+			"request_id":      requestID,
 			"request_version": requestVersion,
 			"path":            r.URL.Path,
 			"method":          r.Method,
@@ -68,6 +71,6 @@ func getHandler(svc SourceService, logger logrus.FieldLogger) http.Handler {
 		})
 
 		h := &handler{svc, l}
-		h.handleRequest(w, r)
+		h.handleRequest(w, r.WithContext(ctx))
 	})
 }

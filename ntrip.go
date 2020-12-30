@@ -1,6 +1,8 @@
 package ntrip
 
-import "fmt"
+import (
+	"fmt"
+)
 
 const (
 	NTRIPVersionHeaderKey     string = "Ntrip-Version"
@@ -15,4 +17,14 @@ var (
 	ErrorNotFound      error = fmt.Errorf("mount not found")
 	ErrorConflict      error = fmt.Errorf("mount in use")
 	ErrorBadRequest    error = fmt.Errorf("bad request")
+
+	// TODO: Added this so a SourceService implementation can extract the Request ID, not sure that
+	//  smuggling it in the context is the best approach
+	RequestIDContextKey contextKey = contextKey("RequestID")
 )
+
+type contextKey string
+
+func (c contextKey) String() string {
+	return string(c)
+}
