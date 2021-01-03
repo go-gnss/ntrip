@@ -100,13 +100,15 @@ var (
 			},
 		},
 	}
-	sourcetableString string = fmt.Sprintf("%s\r\n%s\r\n%s\r\n%s\r\n%s\r\n%s",
+	sourcetableString string = fmt.Sprintf("%s\r\n%s\r\n%s\r\n%s\r\n%s\r\n%s\r\n%s\r\n",
 		"CAS;host;2101;identifier;operator;0;AUS;0.1000;-0.1000;fallback;12101;misc",
 		"CAS;host2;2102;identifier2;operator2;1;AUS;-0.1000;0.1000;fallback2;12102;misc2",
 		"NET;identifier;operator;B;N;https://network.info;https://stream.info;register@operator.io;misc",
 		"NET;identifier2;operator2;N;Y;https://network2.info;https://stream2.info;register2@operator.io;misc2",
 		"STR;name;identifier;format;format details;carrier;nav system;network;AUS;1.0000;-1.0000;0;0;generator;compression;N;N;0;misc",
-		"STR;name2;identifier2;format2;format details2;carrier2;nav system2;network2;AUS;2.0000;-2.0000;1;1;generator2;compression2;B;Y;0;misc2")
+		"STR;name2;identifier2;format2;format details2;carrier2;nav system2;network2;AUS;2.0000;-2.0000;1;1;generator2;compression2;B;Y;0;misc2",
+		"ENDSOURCETABLE",
+	)
 )
 
 func TestSourcetableString(t *testing.T) {

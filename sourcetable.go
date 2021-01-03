@@ -24,7 +24,7 @@ func (st Sourcetable) String() (s string) {
 		s = fmt.Sprintf("%s%s\r\n", s, str)
 	}
 
-	return s[:len(s)-2]
+	return s + "ENDSOURCETABLE\r\n"
 }
 
 // CasterEntry for an NTRIP Sourcetable
