@@ -100,7 +100,7 @@ var (
 			},
 		},
 	}
-	sourcetableString string = fmt.Sprintf("%s\n%s\n%s\n%s\n%s\n%s\n",
+	sourcetableString string = fmt.Sprintf("%s\r\n%s\r\n%s\r\n%s\r\n%s\r\n%s",
 		"CAS;host;2101;identifier;operator;0;AUS;0.1000;-0.1000;fallback;12101;misc",
 		"CAS;host2;2102;identifier2;operator2;1;AUS;-0.1000;0.1000;fallback2;12102;misc2",
 		"NET;identifier;operator;B;N;https://network.info;https://stream.info;register@operator.io;misc",

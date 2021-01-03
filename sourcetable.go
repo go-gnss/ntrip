@@ -13,18 +13,18 @@ type Sourcetable struct {
 
 func (st Sourcetable) String() (s string) {
 	for _, cas := range st.Casters {
-		s = fmt.Sprintf("%s%s\n", s, cas)
+		s = fmt.Sprintf("%s%s\r\n", s, cas)
 	}
 
 	for _, net := range st.Networks {
-		s = fmt.Sprintf("%s%s\n", s, net)
+		s = fmt.Sprintf("%s%s\r\n", s, net)
 	}
 
 	for _, str := range st.Mounts {
-		s = fmt.Sprintf("%s%s\n", s, str)
+		s = fmt.Sprintf("%s%s\r\n", s, str)
 	}
 
-	return s
+	return s[:len(s)-2]
 }
 
 // CasterEntry for an NTRIP Sourcetable
