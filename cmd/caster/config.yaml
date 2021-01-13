@@ -1,0 +1,98 @@
+server:
+  address: ":2101"
+
+logging:
+  debug: true
+
+sourcetable:
+  casters:
+    - host: "example.com"
+      port: 2101
+      misc: "example"
+
+  networks:
+    - identifier: "example"
+      operator: "operator"
+
+  mounts:
+    - name: "TEST00AUS0"
+    - name: "TEST01AUS0"
+    - name: "TEST02AUS0"
+    - name: "TEST03AUS0"
+    - name: "TEST04AUS0"
+    - name: "TEST05AUS0"
+    - name: "TEST06AUS0"
+    - name: "TEST07AUS0"
+    - name: "TEST08AUS0"
+    - name: "TEST09AUS0"
+    - name: "TEST00AUS1"
+    - name: "TEST01AUS1"
+    - name: "TEST02AUS1"
+    - name: "TEST03AUS1"
+    - name: "TEST04AUS1"
+    - name: "TEST05AUS1"
+    - name: "TEST06AUS1"
+    - name: "TEST07AUS1"
+    - name: "TEST08AUS1"
+    - name: "TEST09AUS1"
+    - name: "TEST00AUS2"
+    - name: "TEST01AUS2"
+    - name: "TEST02AUS2"
+    - name: "TEST03AUS2"
+    - name: "TEST04AUS2"
+    - name: "TEST05AUS2"
+    - name: "TEST06AUS2"
+    - name: "TEST07AUS2"
+    - name: "TEST08AUS2"
+    - name: "TEST09AUS2"
+    - name: "TEST00AUS3"
+    - name: "TEST01AUS3"
+    - name: "TEST02AUS3"
+    - name: "TEST03AUS3"
+    - name: "TEST04AUS3"
+    - name: "TEST05AUS3"
+    - name: "TEST06AUS3"
+    - name: "TEST07AUS3"
+    - name: "TEST08AUS3"
+    - name: "TEST09AUS3"
+    - name: "TEST00AUS4"
+    - name: "TEST01AUS4"
+    - name: "TEST02AUS4"
+    - name: "TEST03AUS4"
+    - name: "TEST04AUS4"
+    - name: "TEST05AUS4"
+    - name: "TEST06AUS4"
+    - name: "TEST07AUS4"
+    - name: "TEST08AUS4"
+    - name: "TEST09AUS4"
+    - name: "TEST00AUS5"
+    - name: "TEST01AUS5"
+    - name: "TEST02AUS5"
+    - name: "TEST03AUS5"
+    - name: "TEST04AUS5"
+    - name: "TEST05AUS5"
+    - name: "TEST06AUS5"
+    - name: "TEST07AUS5"
+    - name: "TEST08AUS5"
+    - name: "TEST09AUS5"
+
+users:
+  # htpasswd -nbBC 10 username password
+  user1: $2a$04$WLOVR5yjRo9gfgg4uII/L.8PCTjGLjNja5UL8K9RlufR8nG.K7jjK
+  user2: $2y$10$tvk5r42zBEoBK5QOcTDE9us6RWyOwThH0RpuT88SKC2CrNwxohL6y
+ 
+#    secret: $2y$10$tvk5r42zBEoBK5QOcTDE9us6RWyOwThH0RpuT88SKC2CrNwxohL6y
+#    groups:
+#      - "group1"
+#      - "group3"
+#
+#groups:
+#  group1:
+#    read:
+#      - "*"
+#  group2:
+#    write:
+#      - "*"
+#  group3:
+#    write:
+#      - "TEST00AUS0"
