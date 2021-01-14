@@ -125,6 +125,7 @@ func TestDecodeSourcetable(t *testing.T) {
 	var (
 		table = `
 		CAS;auscors.ga.gov.au;2101;AUSCORS Ntrip Broadcaster;GA;0;AUS;-35.34;149.18
+		CAS;rtcm-ntrip.org;2101;NtripInfoCaster;BKG;0;DEU;50.12;8.69;0.0.0.0;0;http://www.rtcm-ntrip.org/home
 		NET;ARGN;GA;B;N;http://www.ga.gov.au;https://gws.geodesy.ga.gov.au/skeletonFiles/;gnss@ga.gov.au;
 		NET;AUSCOPE;GA;B;N;http://www.ga.gov.au;https://gws.geodesy.ga.gov.au/skeletonFiles/;gnss@ga.gov.au;
 		NET;SPRGN;GA;B;N;http://www.ga.gov.au;https://gws.geodesy.ga.gov.au/skeletonFiles/;gnss@ga.gov.au;
@@ -150,7 +151,7 @@ func TestDecodeSourcetable(t *testing.T) {
 	require.Len(t, err, 0, "error decoding source table")
 
 	// Assert Casters
-	require.Len(t, sourcetable.Casters, 1, "wrong number of casters")
+	require.Len(t, sourcetable.Casters, 2, "wrong number of casters")
 	require.Equal(t, "auscors.ga.gov.au", sourcetable.Casters[0].Host)
 	require.Equal(t, 2101, sourcetable.Casters[0].Port)
 	require.Equal(t, "AUSCORS Ntrip Broadcaster", sourcetable.Casters[0].Identifier)
@@ -159,6 +160,10 @@ func TestDecodeSourcetable(t *testing.T) {
 	require.Equal(t, "AUS", sourcetable.Casters[0].Country)
 	require.Equal(t, float32(-35.34), sourcetable.Casters[0].Latitude)
 	require.Equal(t, float32(149.18), sourcetable.Casters[0].Longitude)
+
+	require.Equal(t, "0.0.0.0", sourcetable.Casters[1].FallbackHostAddress)
+	require.Equal(t, 0, sourcetable.Casters[1].FallbackHostPort)
+	require.Equal(t, "http://www.rtcm-ntrip.org/home", sourcetable.Casters[1].Misc)
 
 	// Assert Networks
 	require.Len(t, sourcetable.Networks, 5, "wrong number of networks")

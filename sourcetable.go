@@ -148,21 +148,27 @@ func ParseSourcetable(str string) (Sourcetable, []error) {
 
 		switch line[:3] {
 		case "CAS":
-			caster, err := ParseCasterEntry(line)
-			if err != nil {
-				errs = append(errs, errors.Wrapf(err, "parsing caster %v", lineNo))
+			caster, errs := ParseCasterEntry(line)
+			if len(errs) != 0 {
+				for _, err := range errs {
+					errs = append(errs, errors.Wrapf(err, "parsing line %v", lineNo))
+				}
 			}
 			table.Casters = append(table.Casters, caster)
 		case "NET":
-			net, err := ParseNetworkEntry(line)
-			if err != nil {
-				errs = append(errs, errors.Wrapf(err, "parsing line %v", lineNo))
+			net, errs := ParseNetworkEntry(line)
+			if len(errs) != 0 {
+				for _, err := range errs {
+					errs = append(errs, errors.Wrapf(err, "parsing line %v", lineNo))
+				}
 			}
 			table.Networks = append(table.Networks, net)
 		case "STR":
-			mount, err := ParseStreamEntry(line)
-			if err != nil {
-				errs = append(errs, errors.Wrapf(err, "parsing line %v", lineNo))
+			mount, errs := ParseStreamEntry(line)
+			if len(errs) != 0 {
+				for _, err := range errs {
+					errs = append(errs, errors.Wrapf(err, "parsing line %v", lineNo))
+				}
 			}
 			table.Mounts = append(table.Mounts, mount)
 		}
@@ -173,119 +179,128 @@ func ParseSourcetable(str string) (Sourcetable, []error) {
 }
 
 // ParseCasterEntry parses a single caster from a string.
-func ParseCasterEntry(casterString string) (CasterEntry, error) {
+func ParseCasterEntry(casterString string) (CasterEntry, []error) {
 	parts := strings.Split(casterString, ";")
 
-	long, err := strconv.ParseFloat(parts[8], 64)
-	if err != nil {
-		return CasterEntry{}, fmt.Errorf("invalid longitude")
-	}
-
-	lat, err := strconv.ParseFloat(parts[7], 64)
-	if err != nil {
-		fmt.Println(err)
-		return CasterEntry{}, fmt.Errorf("invalid latitude")
-	}
-
-	nmea := true
-	if parts[5] == "0" {
-		nmea = false
-	}
-
-	port, err := strconv.ParseInt(parts[2], 10, 64)
-	if err != nil {
-		fmt.Println(err)
-		return CasterEntry{}, fmt.Errorf("invalid port")
-	}
+	p := parser{parts, []error{}}
 
 	return CasterEntry{
-		Host:       parts[1],
-		Port:       int(port),
-		Identifier: parts[3],
-		Operator:   parts[4],
-		NMEA:       nmea,
-		Country:    parts[6],
-		Latitude:   float32(lat),
-		Longitude:  float32(long),
-	}, nil
+		Host:                p.parseString(1, "host"),
+		Port:                p.parseInt(2, "port"),
+		Identifier:          p.parseString(3, "identifier"),
+		Operator:            p.parseString(4, "operator"),
+		NMEA:                p.parseBool(5, "0", "nmea"),
+		Country:             p.parseString(6, "country"),
+		Latitude:            p.parseFloat32(7, "latitude"),
+		Longitude:           p.parseFloat32(8, "longitude"),
+		FallbackHostAddress: p.parseString(9, "fallback host address"),
+		FallbackHostPort:    p.parseInt(10, "fallback host port"),
+		Misc:                p.parseString(11, "misc"),
+	}, p.errors
 
 }
 
 // ParseNetworkEntry parses a single network entry from a string.
-func ParseNetworkEntry(netString string) (NetworkEntry, error) {
+func ParseNetworkEntry(netString string) (NetworkEntry, []error) {
 	parts := strings.Split(netString, ";")
 
-	fee := true
-	if parts[4] == "N" {
-		fee = false
-	}
+	p := parser{parts, []error{}}
 
 	return NetworkEntry{
-		Identifier:          parts[1],
-		Operator:            parts[2],
-		Authentication:      parts[3],
-		Fee:                 fee,
-		NetworkInfoURL:      parts[5],
-		StreamInfoURL:       parts[6],
-		RegistrationAddress: parts[7],
-	}, nil
+		Identifier:          p.parseString(1, "identifier"),
+		Operator:            p.parseString(2, "operator"),
+		Authentication:      p.parseString(3, "authentication"),
+		Fee:                 p.parseBool(4, "N", "fee"),
+		NetworkInfoURL:      p.parseString(5, "network info url"),
+		StreamInfoURL:       p.parseString(6, "stream info url"),
+		RegistrationAddress: p.parseString(7, "registration address"),
+	}, p.errors
 
 }
 
 // ParseStreamEntry parses a single mount entry.
-func ParseStreamEntry(streamString string) (StreamEntry, error) {
+func ParseStreamEntry(streamString string) (StreamEntry, []error) {
 	parts := strings.Split(streamString, ";")
 
-	lat, err := strconv.ParseFloat(parts[9], 64)
-	if err != nil {
-		return StreamEntry{}, fmt.Errorf("invalid latitude")
-	}
-
-	lng, err := strconv.ParseFloat(parts[10], 64)
-	if err != nil {
-		fmt.Println(err)
-		return StreamEntry{}, fmt.Errorf("invalid longitude")
-	}
-
-	nmea := true
-	if parts[11] == "0" {
-		nmea = false
-	}
-
-	solution := true
-	if parts[12] == "0" {
-		solution = false
-	}
-
-	fee := true
-	if parts[16] == "N" {
-		fee = false
-	}
-
-	bitrate, err := strconv.ParseInt(parts[17], 10, 64)
-	if err != nil {
-		fmt.Println(err)
-		return StreamEntry{}, fmt.Errorf("invalid bitrate")
-	}
+	p := parser{parts, []error{}}
 
 	return StreamEntry{
-		Name:          parts[1],
-		Identifier:    parts[2],
-		Format:        parts[3],
-		FormatDetails: parts[4],
-		Carrier:       parts[5],
-		NavSystem:     parts[6],
-		Network:       parts[7],
-		CountryCode:   parts[8],
-		Latitude:      float32(lat),
-		Longitude:     float32(lng),
-		NMEA:          nmea,
-		Solution:      solution,
-		Generator:     parts[13],
-		Compression:   parts[14],
+		Name:          p.parseString(1, "name"),
+		Identifier:    p.parseString(2, "identifier"),
+		Format:        p.parseString(3, "format"),
+		FormatDetails: p.parseString(4, "format details"),
+		Carrier:       p.parseString(5, "carrier"),
+		NavSystem:     p.parseString(6, "nav system"),
+		Network:       p.parseString(7, "network"),
+		CountryCode:   p.parseString(8, "country code"),
+		Latitude:      p.parseFloat32(9, "latitude"),
+		Longitude:     p.parseFloat32(10, "logitude"),
+		NMEA:          p.parseBool(11, "0", "nmea"),
+		Solution:      p.parseBool(12, "0", "solution"),
+		Generator:     p.parseString(13, "generator"),
+		Compression:   p.parseString(14, "compression"),
 		// TODO: Authentication type
-		Authentication: parts[15],
-		Fee:            fee,
-		Bitrate:        int(bitrate),
-	}, nil
+		Authentication: p.parseString(15, "authentication"),
+		Fee:            p.parseBool(16, "N", "fee"),
+		Bitrate:        p.parseInt(17, "bitrate"),
+	}, p.errors
+}
+
+type parser struct {
+	parts  []string
+	errors []error
+}
+
+func (p parser) parseString(index int, field string) string {
+
+	if len(p.parts) <= index {
+		p.errors = append(p.errors, fmt.Errorf("parsing %s", field))
+		return ""
+	}
+
+	return p.parts[index]
+}
+
+func (p parser) parseFloat32(index int, field string) float32 {
+	if len(p.parts) <= index {
+		p.errors = append(p.errors, fmt.Errorf("parsing %s", field))
+		return 0
+	}
+
+	floatField, err := strconv.ParseFloat(p.parts[index], 64)
+	if err != nil {
+		p.errors = append(p.errors, fmt.Errorf("converting %s to a float32", field))
+		return 0
+	}
+
+	return float32(floatField)
+}
+
+func (p parser) parseInt(index int, field string) int {
+	if len(p.parts) <= index {
+		p.errors = append(p.errors, fmt.Errorf("parsing %s", field))
+		return 0
+	}
+
+	floatField, err := strconv.ParseInt(p.parts[index], 10, 64)
+	if err != nil {
+		p.errors = append(p.errors, fmt.Errorf("converting %s to an int", field))
+		return 0
+	}
+
+	return int(floatField)
+}
+
+func (p parser) parseBool(index int, falseValue string, field string) bool {
+	if len(p.parts) <= index {
+		p.errors = append(p.errors, fmt.Errorf("parsing %s", field))
+		return false
+	}
+
+	val := true
+	if p.parts[index] == falseValue {
+		val = false
+	}
+
+	return val
 }
