@@ -144,7 +144,7 @@ func TestDecodeSourcetable(t *testing.T) {
 	)
 
 	// Act
-	sourcetable, err := DecodeSourcetable([]byte(table))
+	sourcetable, err := ParseSourcetable([]byte(table))
 
 	// Assert
 	require.Len(t, err, 0, "error decoding source table")

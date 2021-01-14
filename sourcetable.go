@@ -128,8 +128,8 @@ func (m MountEntry) String() string {
 		m.Authentication, fee, m.Bitrate, m.Misc)
 }
 
-// DecodeSourcetable parses a sourcetable from an ioreader into a ntrip style source table.
-func DecodeSourcetable(in []byte) (Sourcetable, []error) {
+// ParseSourcetable parses a sourcetable from an ioreader into a ntrip style source table.
+func ParseSourcetable(in []byte) (Sourcetable, []error) {
 	table := Sourcetable{}
 	str := string(in[:])
 	var errs []error
@@ -149,19 +149,19 @@ func DecodeSourcetable(in []byte) (Sourcetable, []error) {
 
 		switch line[:3] {
 		case "CAS":
-			caster, err := buildCasterEntry(line)
+			caster, err := ParseCasterEntry(line)
 			if err != nil {
 				errs = append(errs, errors.Wrapf(err, "parsing caster %v", lineNo))
 			}
 			table.Casters = append(table.Casters, caster)
 		case "NET":
-			net, err := buildNetEntry(line)
+			net, err := ParseNetworkEntry(line)
 			if err != nil {
 				errs = append(errs, errors.Wrapf(err, "parsing line %v", lineNo))
 			}
 			table.Networks = append(table.Networks, net)
 		case "STR":
-			mount, err := buildMountEntry(line)
+			mount, err := ParseMountEntry(line)
 			if err != nil {
 				errs = append(errs, errors.Wrapf(err, "parsing line %v", lineNo))
 			}
@@ -173,7 +173,8 @@ func DecodeSourcetable(in []byte) (Sourcetable, []error) {
 	return table, errs
 }
 
-func buildCasterEntry(casterString string) (CasterEntry, error) {
+// ParseCasterEntry parses a single caster from a string.
+func ParseCasterEntry(casterString string) (CasterEntry, error) {
 	parts := strings.Split(casterString, ";")
 
 	long, err := strconv.ParseFloat(parts[8], 64)
@@ -211,7 +212,8 @@ func buildCasterEntry(casterString string) (CasterEntry, error) {
 
 }
 
-func buildNetEntry(netString string) (NetworkEntry, error) {
+// ParseNetworkEntry parses a single network entry from a string.
+func ParseNetworkEntry(netString string) (NetworkEntry, error) {
 	parts := strings.Split(netString, ";")
 
 	fee := true
@@ -231,7 +233,8 @@ func buildNetEntry(netString string) (NetworkEntry, error) {
 
 }
 
-func buildMountEntry(mountString string) (MountEntry, error) {
+// ParseMountEntry parses a single mount entry.
+func ParseMountEntry(mountString string) (MountEntry, error) {
 	parts := strings.Split(mountString, ";")
 
 	lat, err := strconv.ParseFloat(parts[9], 64)
