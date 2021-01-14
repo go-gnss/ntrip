@@ -2,13 +2,17 @@ package ntrip
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
+
+	"github.com/pkg/errors"
 )
 
 // Sourcetable for NTRIP Casters, returned at / as a way for users to discover available mounts
 type Sourcetable struct {
 	Casters  []CasterEntry
 	Networks []NetworkEntry
-	Mounts   []MountEntry
+	Mounts   []StreamEntry
 }
 
 func (st Sourcetable) String() (s string) {
@@ -78,8 +82,8 @@ func (n NetworkEntry) String() string {
 		n.RegistrationAddress, n.Misc)
 }
 
-// MountEntry for an NTRIP Sourcetable
-type MountEntry struct {
+// StreamEntry for an NTRIP Sourcetable
+type StreamEntry struct {
 	Name          string
 	Identifier    string
 	Format        string
@@ -102,7 +106,7 @@ type MountEntry struct {
 }
 
 // String representation of Mount in NTRIP Sourcetable entry format
-func (m MountEntry) String() string {
+func (m StreamEntry) String() string {
 	nmea := "0"
 	if m.NMEA {
 		nmea = "1"
@@ -122,4 +126,187 @@ func (m MountEntry) String() string {
 		m.Name, m.Identifier, m.Format, m.FormatDetails, m.Carrier, m.NavSystem, m.Network,
 		m.CountryCode, m.Latitude, m.Longitude, nmea, solution, m.Generator, m.Compression,
 		m.Authentication, fee, m.Bitrate, m.Misc)
+}
+
+// ParseSourcetable parses a sourcetable from an ioreader into a ntrip style source table.
+func ParseSourcetable(str string) (Sourcetable, []error) {
+	table := Sourcetable{}
+	var allErrors []error
+
+	lines := strings.Split(str, "\n")
+
+	for lineNo, rawLine := range lines {
+		line := strings.TrimSpace(rawLine)
+
+		if line == "" {
+			continue
+		}
+
+		if line == "ENDSOURCETABLE" {
+			break
+		}
+
+		switch line[:3] {
+		case "CAS":
+			caster, errs := ParseCasterEntry(line)
+			if len(errs) != 0 {
+				for _, err := range errs {
+					allErrors = append(allErrors, errors.Wrapf(err, "parsing line %v", lineNo))
+				}
+			}
+			table.Casters = append(table.Casters, caster)
+		case "NET":
+			net, errs := ParseNetworkEntry(line)
+			if len(errs) != 0 {
+				for _, err := range errs {
+					allErrors = append(allErrors, errors.Wrapf(err, "parsing line %v", lineNo))
+				}
+			}
+			table.Networks = append(table.Networks, net)
+		case "STR":
+			mount, errs := ParseStreamEntry(line)
+			if len(errs) != 0 {
+				for _, err := range errs {
+					allErrors = append(allErrors, errors.Wrapf(err, "parsing line %v", lineNo))
+				}
+			}
+			table.Mounts = append(table.Mounts, mount)
+		}
+
+	}
+
+	return table, allErrors
+}
+
+// ParseCasterEntry parses a single caster from a string.
+func ParseCasterEntry(casterString string) (CasterEntry, []error) {
+	parts := strings.Split(casterString, ";")
+
+	p := &parser{parts, []error{}}
+
+	return CasterEntry{
+		Host:                p.parseString(1, "host"),
+		Port:                p.parseInt(2, "port"),
+		Identifier:          p.parseString(3, "identifier"),
+		Operator:            p.parseString(4, "operator"),
+		NMEA:                p.parseBool(5, "0", "nmea"),
+		Country:             p.parseString(6, "country"),
+		Latitude:            p.parseFloat32(7, "latitude"),
+		Longitude:           p.parseFloat32(8, "longitude"),
+		FallbackHostAddress: p.parseString(9, "fallback host address"),
+		FallbackHostPort:    p.parseInt(10, "fallback host port"),
+		Misc:                p.parseString(11, "misc"),
+	}, p.errors
+
+}
+
+// ParseNetworkEntry parses a single network entry from a string.
+func ParseNetworkEntry(netString string) (NetworkEntry, []error) {
+	parts := strings.Split(netString, ";")
+
+	p := &parser{parts, []error{}}
+
+	return NetworkEntry{
+		Identifier:          p.parseString(1, "identifier"),
+		Operator:            p.parseString(2, "operator"),
+		Authentication:      p.parseString(3, "authentication"),
+		Fee:                 p.parseBool(4, "N", "fee"),
+		NetworkInfoURL:      p.parseString(5, "network info url"),
+		StreamInfoURL:       p.parseString(6, "stream info url"),
+		RegistrationAddress: p.parseString(7, "registration address"),
+	}, p.errors
+
+}
+
+// ParseStreamEntry parses a single mount entry.
+func ParseStreamEntry(streamString string) (StreamEntry, []error) {
+	parts := strings.Split(streamString, ";")
+
+	p := &parser{parts, []error{}}
+
+	streamEntry := StreamEntry{
+		Name:          p.parseString(1, "name"),
+		Identifier:    p.parseString(2, "identifier"),
+		Format:        p.parseString(3, "format"),
+		FormatDetails: p.parseString(4, "format details"),
+		Carrier:       p.parseString(5, "carrier"),
+		NavSystem:     p.parseString(6, "nav system"),
+		Network:       p.parseString(7, "network"),
+		CountryCode:   p.parseString(8, "country code"),
+		Latitude:      p.parseFloat32(9, "latitude"),
+		Longitude:     p.parseFloat32(10, "logitude"),
+		NMEA:          p.parseBool(11, "0", "nmea"),
+		Solution:      p.parseBool(12, "0", "solution"),
+		Generator:     p.parseString(13, "generator"),
+		Compression:   p.parseString(14, "compression"),
+		// TODO: Authentication type
+		Authentication: p.parseString(15, "authentication"),
+		Fee:            p.parseBool(16, "N", "fee"),
+		Bitrate:        p.parseInt(17, "bitrate"),
+	}
+
+	return streamEntry, p.errs()
+}
+
+type parser struct {
+	parts  []string
+	errors []error
+}
+
+func (p *parser) parseString(index int, field string) string {
+
+	if len(p.parts) <= index {
+		p.errors = append(p.errors, fmt.Errorf("parsing %s", field))
+		return ""
+	}
+
+	return p.parts[index]
+}
+
+func (p *parser) parseFloat32(index int, field string) float32 {
+	if len(p.parts) <= index {
+		p.errors = append(p.errors, fmt.Errorf("parsing %s", field))
+		return 0
+	}
+
+	floatField, err := strconv.ParseFloat(p.parts[index], 64)
+	if err != nil {
+		p.errors = append(p.errors, fmt.Errorf("converting %s to a float32", field))
+		return 0
+	}
+
+	return float32(floatField)
+}
+
+func (p *parser) parseInt(index int, field string) int {
+	if len(p.parts) <= index {
+		p.errors = append(p.errors, fmt.Errorf("parsing %s", field))
+		return 0
+	}
+
+	floatField, err := strconv.ParseInt(p.parts[index], 10, 64)
+	if err != nil {
+		p.errors = append(p.errors, fmt.Errorf("converting %s to an int", field))
+		return 0
+	}
+
+	return int(floatField)
+}
+
+func (p *parser) parseBool(index int, falseValue string, field string) bool {
+	if len(p.parts) <= index {
+		p.errors = append(p.errors, fmt.Errorf("parsing %s", field))
+		return false
+	}
+
+	val := true
+	if p.parts[index] == falseValue {
+		val = false
+	}
+
+	return val
+}
+
+func (p *parser) errs() []error {
+	return p.errors
 }
