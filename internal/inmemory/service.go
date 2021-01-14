@@ -9,20 +9,22 @@ import (
 	"github.com/go-gnss/ntrip"
 )
 
-// TODO: Better names
-type mount struct {
+type OnlineMount struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	// Subscribers register themselves by adding their writer to the slice
 	clients []io.WriteCloser
 }
 
+// Mount exists regardless of whether or not it is currently being streamed to.
+// OnlineMount will be nil if the mount is offline.
 type Mount struct {
 	sync.RWMutex
 	ntrip.MountEntry
-	mount *mount
+	OnlineMount *OnlineMount
 }
 
+// Sources contains Sourcetable information as well as a Mount collection
 type Sources struct {
 	sync.RWMutex
 	Casters  []ntrip.CasterEntry
@@ -32,30 +34,30 @@ type Sources struct {
 
 // SourceService is an in-memory implementation of ntrip.SourceService
 type SourceService struct {
-	sourcetable *Sources
-	auth        Authoriser
+	sources *Sources
+	auth    Authoriser
 }
 
 func NewSourceService(st ntrip.Sourcetable, auth Authoriser) *SourceService {
 	ss := &SourceService{
-		sourcetable: &Sources{Mounts: map[string]*Mount{}},
-		auth:        auth,
+		sources: &Sources{Mounts: map[string]*Mount{}},
+		auth:    auth,
 	}
 	ss.UpdateSourcetable(st)
 	return ss
 }
 
 func (ss *SourceService) UpdateSourcetable(st ntrip.Sourcetable) {
-	ss.sourcetable.Lock()
-	defer ss.sourcetable.Unlock()
+	ss.sources.Lock()
+	defer ss.sources.Unlock()
 
-	ss.sourcetable.Casters = st.Casters
-	ss.sourcetable.Networks = st.Networks
+	ss.sources.Casters = st.Casters
+	ss.sources.Networks = st.Networks
 
 	// Check for new mounts from config
 	for _, mount := range st.Mounts {
-		if m, ok := ss.sourcetable.Mounts[mount.Name]; !ok {
-			ss.sourcetable.Mounts[mount.Name] = &Mount{MountEntry: mount}
+		if m, ok := ss.sources.Mounts[mount.Name]; !ok {
+			ss.sources.Mounts[mount.Name] = &Mount{MountEntry: mount}
 		} else {
 			m.MountEntry = mount
 		}
@@ -64,7 +66,7 @@ func (ss *SourceService) UpdateSourcetable(st ntrip.Sourcetable) {
 	// Remove mounts which have been deleted from the config file
 	// TODO: Efficient?
 OUTER:
-	for name, mount := range ss.sourcetable.Mounts {
+	for name, mount := range ss.sources.Mounts {
 		for _, mountEntry := range st.Mounts {
 			if mount.MountEntry == mountEntry {
 				continue OUTER
@@ -73,24 +75,26 @@ OUTER:
 		// Cancel mount and remove from list of Mounts
 		// TODO: Log that mount was removed
 		mount.Lock()
-		if mount.mount != nil {
-			mount.mount.cancel()
+		if mount.OnlineMount != nil {
+			mount.OnlineMount.cancel()
 		}
 		mount.Unlock()
-		delete(ss.sourcetable.Mounts, name)
+		delete(ss.sources.Mounts, name)
 	}
 }
 
 func (ss *SourceService) GetSourcetable() ntrip.Sourcetable {
-	ss.sourcetable.RLock()
-	defer ss.sourcetable.RUnlock()
+	ss.sources.RLock()
+	defer ss.sources.RUnlock()
 	st := ntrip.Sourcetable{
-		Casters:  ss.sourcetable.Casters,
-		Networks: ss.sourcetable.Networks,
+		Casters:  ss.sources.Casters,
+		Networks: ss.sources.Networks,
 		Mounts:   []ntrip.MountEntry{},
 	}
-	for _, mount := range ss.sourcetable.Mounts {
-		if mount.mount != nil {
+
+	// Include only online mounts in returned Sourcetable
+	for _, mount := range ss.sources.Mounts {
+		if mount.OnlineMount != nil {
 			st.Mounts = append(st.Mounts, mount.MountEntry)
 		}
 	}
@@ -104,11 +108,11 @@ func (ss *SourceService) Publisher(ctx context.Context, mountName, username, pas
 		return nil, ntrip.ErrorNotAuthorized
 	}
 
-	ss.sourcetable.Lock()
-	defer ss.sourcetable.Unlock()
+	ss.sources.Lock()
+	defer ss.sources.Unlock()
 
-	m, ok := ss.sourcetable.Mounts[mountName]
-	if ok && m.mount != nil {
+	m, ok := ss.sources.Mounts[mountName]
+	if ok && m.OnlineMount != nil {
 		return nil, ntrip.ErrorConflict
 	}
 
@@ -117,9 +121,9 @@ func (ss *SourceService) Publisher(ctx context.Context, mountName, username, pas
 		return nil, ntrip.ErrorNotAuthorized
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	m.Lock()
-	m.mount = &mount{ctx: ctx, cancel: cancel, clients: []io.WriteCloser{}}
+	m.OnlineMount = &OnlineMount{ctx: ctx, cancel: cancel, clients: []io.WriteCloser{}}
 	m.Unlock()
 
 	r, w := io.Pipe()
@@ -134,12 +138,12 @@ func serve(r io.ReadCloser, m *Mount) {
 		// Close client writers
 		m.Lock()
 		defer m.Unlock()
-		for _, client := range m.mount.clients {
+		for _, client := range m.OnlineMount.clients {
 			client.Close()
 		}
 
 		// Make Mount "offline"
-		m.mount = nil
+		m.OnlineMount = nil
 
 		r.Close()
 	}()
@@ -148,7 +152,7 @@ func serve(r io.ReadCloser, m *Mount) {
 		// Read
 		var data []byte
 		select {
-		case <-m.mount.ctx.Done():
+		case <-m.OnlineMount.ctx.Done():
 			return
 		case result := <-readChannel(r):
 			if result.err != nil {
@@ -159,10 +163,10 @@ func serve(r io.ReadCloser, m *Mount) {
 
 		// Write
 		m.Lock()
-		for i, w := range m.mount.clients {
+		for i, w := range m.OnlineMount.clients {
 			if _, err := w.Write(data); err != nil {
 				// Re-slice to remove closed Writer
-				m.mount.clients = append(m.mount.clients[:i], m.mount.clients[i+1:]...)
+				m.OnlineMount.clients = append(m.OnlineMount.clients[:i], m.OnlineMount.clients[i+1:]...)
 			}
 		}
 		m.Unlock()
@@ -191,16 +195,16 @@ func (ss *SourceService) Subscriber(ctx context.Context, mountName, username, pa
 		return nil, ntrip.ErrorNotAuthorized
 	}
 
-	ss.sourcetable.RLock()
-	m, ok := ss.sourcetable.Mounts[mountName]
-	ss.sourcetable.RUnlock()
-	if !ok || m.mount == nil {
+	ss.sources.RLock()
+	m, ok := ss.sources.Mounts[mountName]
+	ss.sources.RUnlock()
+	if !ok || m.OnlineMount == nil {
 		return nil, ntrip.ErrorNotFound
 	}
 
 	r, w := io.Pipe()
 	m.Lock()
-	m.mount.clients = append(m.mount.clients, w)
+	m.OnlineMount.clients = append(m.OnlineMount.clients, w)
 	m.Unlock()
 
 	// Cleanup when client closes connection
