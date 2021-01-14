@@ -131,7 +131,7 @@ func (m StreamEntry) String() string {
 // ParseSourcetable parses a sourcetable from an ioreader into a ntrip style source table.
 func ParseSourcetable(str string) (Sourcetable, []error) {
 	table := Sourcetable{}
-	var errs []error
+	var allErrors []error
 
 	lines := strings.Split(str, "\n")
 
@@ -151,7 +151,7 @@ func ParseSourcetable(str string) (Sourcetable, []error) {
 			caster, errs := ParseCasterEntry(line)
 			if len(errs) != 0 {
 				for _, err := range errs {
-					errs = append(errs, errors.Wrapf(err, "parsing line %v", lineNo))
+					allErrors = append(allErrors, errors.Wrapf(err, "parsing line %v", lineNo))
 				}
 			}
 			table.Casters = append(table.Casters, caster)
@@ -159,7 +159,7 @@ func ParseSourcetable(str string) (Sourcetable, []error) {
 			net, errs := ParseNetworkEntry(line)
 			if len(errs) != 0 {
 				for _, err := range errs {
-					errs = append(errs, errors.Wrapf(err, "parsing line %v", lineNo))
+					allErrors = append(allErrors, errors.Wrapf(err, "parsing line %v", lineNo))
 				}
 			}
 			table.Networks = append(table.Networks, net)
@@ -167,7 +167,7 @@ func ParseSourcetable(str string) (Sourcetable, []error) {
 			mount, errs := ParseStreamEntry(line)
 			if len(errs) != 0 {
 				for _, err := range errs {
-					errs = append(errs, errors.Wrapf(err, "parsing line %v", lineNo))
+					allErrors = append(allErrors, errors.Wrapf(err, "parsing line %v", lineNo))
 				}
 			}
 			table.Mounts = append(table.Mounts, mount)
@@ -175,14 +175,14 @@ func ParseSourcetable(str string) (Sourcetable, []error) {
 
 	}
 
-	return table, errs
+	return table, allErrors
 }
 
 // ParseCasterEntry parses a single caster from a string.
 func ParseCasterEntry(casterString string) (CasterEntry, []error) {
 	parts := strings.Split(casterString, ";")
 
-	p := parser{parts, []error{}}
+	p := &parser{parts, []error{}}
 
 	return CasterEntry{
 		Host:                p.parseString(1, "host"),
@@ -204,7 +204,7 @@ func ParseCasterEntry(casterString string) (CasterEntry, []error) {
 func ParseNetworkEntry(netString string) (NetworkEntry, []error) {
 	parts := strings.Split(netString, ";")
 
-	p := parser{parts, []error{}}
+	p := &parser{parts, []error{}}
 
 	return NetworkEntry{
 		Identifier:          p.parseString(1, "identifier"),
@@ -222,9 +222,9 @@ func ParseNetworkEntry(netString string) (NetworkEntry, []error) {
 func ParseStreamEntry(streamString string) (StreamEntry, []error) {
 	parts := strings.Split(streamString, ";")
 
-	p := parser{parts, []error{}}
+	p := &parser{parts, []error{}}
 
-	return StreamEntry{
+	streamEntry := StreamEntry{
 		Name:          p.parseString(1, "name"),
 		Identifier:    p.parseString(2, "identifier"),
 		Format:        p.parseString(3, "format"),
@@ -243,7 +243,9 @@ func ParseStreamEntry(streamString string) (StreamEntry, []error) {
 		Authentication: p.parseString(15, "authentication"),
 		Fee:            p.parseBool(16, "N", "fee"),
 		Bitrate:        p.parseInt(17, "bitrate"),
-	}, p.errors
+	}
+
+	return streamEntry, p.errs()
 }
 
 type parser struct {
@@ -251,7 +253,7 @@ type parser struct {
 	errors []error
 }
 
-func (p parser) parseString(index int, field string) string {
+func (p *parser) parseString(index int, field string) string {
 
 	if len(p.parts) <= index {
 		p.errors = append(p.errors, fmt.Errorf("parsing %s", field))
@@ -261,7 +263,7 @@ func (p parser) parseString(index int, field string) string {
 	return p.parts[index]
 }
 
-func (p parser) parseFloat32(index int, field string) float32 {
+func (p *parser) parseFloat32(index int, field string) float32 {
 	if len(p.parts) <= index {
 		p.errors = append(p.errors, fmt.Errorf("parsing %s", field))
 		return 0
@@ -276,7 +278,7 @@ func (p parser) parseFloat32(index int, field string) float32 {
 	return float32(floatField)
 }
 
-func (p parser) parseInt(index int, field string) int {
+func (p *parser) parseInt(index int, field string) int {
 	if len(p.parts) <= index {
 		p.errors = append(p.errors, fmt.Errorf("parsing %s", field))
 		return 0
@@ -291,7 +293,7 @@ func (p parser) parseInt(index int, field string) int {
 	return int(floatField)
 }
 
-func (p parser) parseBool(index int, falseValue string, field string) bool {
+func (p *parser) parseBool(index int, falseValue string, field string) bool {
 	if len(p.parts) <= index {
 		p.errors = append(p.errors, fmt.Errorf("parsing %s", field))
 		return false
@@ -303,4 +305,8 @@ func (p parser) parseBool(index int, falseValue string, field string) bool {
 	}
 
 	return val
+}
+
+func (p *parser) errs() []error {
+	return p.errors
 }

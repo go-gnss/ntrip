@@ -148,7 +148,8 @@ func TestDecodeSourcetable(t *testing.T) {
 	sourcetable, err := ParseSourcetable(table)
 
 	// Assert
-	require.Len(t, err, 0, "error decoding source table")
+	// should report the three 'errors' from the first caster not matching the spec
+	require.Len(t, err, 3, "error decoding source table")
 
 	// Assert Casters
 	require.Len(t, sourcetable.Casters, 2, "wrong number of casters")
