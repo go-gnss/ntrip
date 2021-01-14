@@ -1,7 +1,10 @@
 package ntrip
 
 import (
+	"context"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"strconv"
 	"strings"
 
@@ -126,6 +129,39 @@ func (m StreamEntry) String() string {
 		m.Name, m.Identifier, m.Format, m.FormatDetails, m.Carrier, m.NavSystem, m.Network,
 		m.CountryCode, m.Latitude, m.Longitude, nmea, solution, m.Generator, m.Compression,
 		m.Authentication, fee, m.Bitrate, m.Misc)
+}
+
+// GetSourcetable fetches a source table from a specific caster.
+func GetSourcetable(ctx context.Context, url string) (Sourcetable, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return Sourcetable{}, errors.Wrap(err, "building request")
+	}
+
+	req.Header.Set("Ntrip-Version", "Ntrip/2.0")
+	req.Header.Set("User-Agent", "ntrip-mqtt-gateway")
+
+	client := &http.Client{}
+
+	res, err := client.Do(req)
+	if err != nil {
+		return Sourcetable{}, err
+	}
+	defer res.Body.Close()
+
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return Sourcetable{}, err
+	}
+
+	if res.StatusCode != 200 {
+		return Sourcetable{}, fmt.Errorf("received a non 200 status code")
+	}
+
+	// Swollowing the errors here is okay because the errors are more like warnings.
+	// All rows that could be parsed will be present in the source table.
+	table, _ := ParseSourcetable(string(body[:]))
+	return table, nil
 }
 
 // ParseSourcetable parses a sourcetable from an ioreader into a ntrip style source table.
