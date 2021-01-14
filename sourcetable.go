@@ -2,6 +2,10 @@ package ntrip
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
+
+	"github.com/pkg/errors"
 )
 
 // Sourcetable for NTRIP Casters, returned at / as a way for users to discover available mounts
@@ -122,4 +126,164 @@ func (m MountEntry) String() string {
 		m.Name, m.Identifier, m.Format, m.FormatDetails, m.Carrier, m.NavSystem, m.Network,
 		m.CountryCode, m.Latitude, m.Longitude, nmea, solution, m.Generator, m.Compression,
 		m.Authentication, fee, m.Bitrate, m.Misc)
+}
+
+// DecodeSourcetable parses a sourcetable from an ioreader into a ntrip style source table.
+func DecodeSourcetable(in []byte) (Sourcetable, []error) {
+	table := Sourcetable{}
+	str := string(in[:])
+	var errs []error
+
+	lines := strings.Split(str, "\n")
+
+	for lineNo, rawLine := range lines {
+		line := strings.TrimSpace(rawLine)
+
+		if line == "" {
+			continue
+		}
+
+		if line == "ENDSOURCETABLE" {
+			break
+		}
+
+		switch line[:3] {
+		case "CAS":
+			caster, err := buildCasterEntry(line)
+			if err != nil {
+				errs = append(errs, errors.Wrapf(err, "parsing caster %v", lineNo))
+			}
+			table.Casters = append(table.Casters, caster)
+		case "NET":
+			net, err := buildNetEntry(line)
+			if err != nil {
+				errs = append(errs, errors.Wrapf(err, "parsing line %v", lineNo))
+			}
+			table.Networks = append(table.Networks, net)
+		case "STR":
+			mount, err := buildMountEntry(line)
+			if err != nil {
+				errs = append(errs, errors.Wrapf(err, "parsing line %v", lineNo))
+			}
+			table.Mounts = append(table.Mounts, mount)
+		}
+
+	}
+
+	return table, errs
+}
+
+func buildCasterEntry(casterString string) (CasterEntry, error) {
+	parts := strings.Split(casterString, ";")
+
+	long, err := strconv.ParseFloat(parts[8], 64)
+	if err != nil {
+		return CasterEntry{}, fmt.Errorf("invalid longitude")
+	}
+
+	lat, err := strconv.ParseFloat(parts[7], 64)
+	if err != nil {
+		fmt.Println(err)
+		return CasterEntry{}, fmt.Errorf("invalid latitude")
+	}
+
+	nmea := true
+	if parts[5] == "0" {
+		nmea = false
+	}
+
+	port, err := strconv.ParseInt(parts[2], 10, 64)
+	if err != nil {
+		fmt.Println(err)
+		return CasterEntry{}, fmt.Errorf("invalid port")
+	}
+
+	return CasterEntry{
+		Host:       parts[1],
+		Port:       int(port),
+		Identifier: parts[3],
+		Operator:   parts[4],
+		NMEA:       nmea,
+		Country:    parts[6],
+		Latitude:   float32(lat),
+		Longitude:  float32(long),
+	}, nil
+
+}
+
+func buildNetEntry(netString string) (NetworkEntry, error) {
+	parts := strings.Split(netString, ";")
+
+	fee := true
+	if parts[4] == "N" {
+		fee = false
+	}
+
+	return NetworkEntry{
+		Identifier:          parts[1],
+		Operator:            parts[2],
+		Authentication:      parts[3],
+		Fee:                 fee,
+		NetworkInfoURL:      parts[5],
+		StreamInfoURL:       parts[6],
+		RegistrationAddress: parts[7],
+	}, nil
+
+}
+
+func buildMountEntry(mountString string) (MountEntry, error) {
+	parts := strings.Split(mountString, ";")
+
+	lat, err := strconv.ParseFloat(parts[9], 64)
+	if err != nil {
+		return MountEntry{}, fmt.Errorf("invalid latitude")
+	}
+
+	lng, err := strconv.ParseFloat(parts[10], 64)
+	if err != nil {
+		fmt.Println(err)
+		return MountEntry{}, fmt.Errorf("invalid longitude")
+	}
+
+	nmea := true
+	if parts[11] == "0" {
+		nmea = false
+	}
+
+	solution := true
+	if parts[12] == "0" {
+		solution = false
+	}
+
+	fee := true
+	if parts[16] == "N" {
+		fee = false
+	}
+
+	bitrate, err := strconv.ParseInt(parts[17], 10, 64)
+	if err != nil {
+		fmt.Println(err)
+		return MountEntry{}, fmt.Errorf("invalid bitrate")
+	}
+
+	return MountEntry{
+		Name:          parts[1],
+		Identifier:    parts[2],
+		Format:        parts[3],
+		FormatDetails: parts[4],
+		Carrier:       parts[5],
+		NavSystem:     parts[6],
+		Network:       parts[7],
+		CountryCode:   parts[8],
+		Latitude:      float32(lat),
+		Longitude:     float32(lng),
+		NMEA:          nmea,
+		Solution:      solution,
+		Generator:     parts[13],
+		Compression:   parts[14],
+		// TODO: Authentication type
+		Authentication: parts[15],
+		Fee:            fee,
+		Bitrate:        int(bitrate),
+	}, nil
 }
