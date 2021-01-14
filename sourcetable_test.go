@@ -59,7 +59,7 @@ var (
 				Misc:                "misc2",
 			},
 		},
-		Mounts: []MountEntry{
+		Mounts: []StreamEntry{
 			{
 				Name:           "name",
 				Identifier:     "identifier",

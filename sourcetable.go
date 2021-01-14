@@ -12,7 +12,7 @@ import (
 type Sourcetable struct {
 	Casters  []CasterEntry
 	Networks []NetworkEntry
-	Mounts   []MountEntry
+	Mounts   []StreamEntry
 }
 
 func (st Sourcetable) String() (s string) {
@@ -82,8 +82,8 @@ func (n NetworkEntry) String() string {
 		n.RegistrationAddress, n.Misc)
 }
 
-// MountEntry for an NTRIP Sourcetable
-type MountEntry struct {
+// StreamEntry for an NTRIP Sourcetable
+type StreamEntry struct {
 	Name          string
 	Identifier    string
 	Format        string
@@ -106,7 +106,7 @@ type MountEntry struct {
 }
 
 // String representation of Mount in NTRIP Sourcetable entry format
-func (m MountEntry) String() string {
+func (m StreamEntry) String() string {
 	nmea := "0"
 	if m.NMEA {
 		nmea = "1"
@@ -233,18 +233,18 @@ func ParseNetworkEntry(netString string) (NetworkEntry, error) {
 }
 
 // ParseStreamEntry parses a single mount entry.
-func ParseStreamEntry(streamString string) (MountEntry, error) {
+func ParseStreamEntry(streamString string) (StreamEntry, error) {
 	parts := strings.Split(streamString, ";")
 
 	lat, err := strconv.ParseFloat(parts[9], 64)
 	if err != nil {
-		return MountEntry{}, fmt.Errorf("invalid latitude")
+		return StreamEntry{}, fmt.Errorf("invalid latitude")
 	}
 
 	lng, err := strconv.ParseFloat(parts[10], 64)
 	if err != nil {
 		fmt.Println(err)
-		return MountEntry{}, fmt.Errorf("invalid longitude")
+		return StreamEntry{}, fmt.Errorf("invalid longitude")
 	}
 
 	nmea := true
@@ -265,10 +265,10 @@ func ParseStreamEntry(streamString string) (MountEntry, error) {
 	bitrate, err := strconv.ParseInt(parts[17], 10, 64)
 	if err != nil {
 		fmt.Println(err)
-		return MountEntry{}, fmt.Errorf("invalid bitrate")
+		return StreamEntry{}, fmt.Errorf("invalid bitrate")
 	}
 
-	return MountEntry{
+	return StreamEntry{
 		Name:          parts[1],
 		Identifier:    parts[2],
 		Format:        parts[3],
