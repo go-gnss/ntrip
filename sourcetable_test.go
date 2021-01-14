@@ -1,6 +1,7 @@
 package ntrip
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -194,4 +195,22 @@ func TestDecodeSourcetable(t *testing.T) {
 	require.Equal(t, "SEPT POLARX4TR", sourcetable.Mounts[0].Generator)
 	require.Equal(t, "none", sourcetable.Mounts[0].Compression)
 	require.Equal(t, 9600, sourcetable.Mounts[0].Bitrate)
+}
+
+func TestGetSourcetable(t *testing.T) {
+
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	// Arrange
+	ctx := context.Background()
+	url := "http://auscors.ga.gov.au:2101"
+
+	// Act
+	mapping, err := GetSourcetable(ctx, url)
+
+	// Assert
+	require.Nil(t, err, "error fetching source table")
+	require.NotNil(t, mapping, "got an empty source table")
 }
