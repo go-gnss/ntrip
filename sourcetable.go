@@ -129,9 +129,8 @@ func (m MountEntry) String() string {
 }
 
 // ParseSourcetable parses a sourcetable from an ioreader into a ntrip style source table.
-func ParseSourcetable(in []byte) (Sourcetable, []error) {
+func ParseSourcetable(str string) (Sourcetable, []error) {
 	table := Sourcetable{}
-	str := string(in[:])
 	var errs []error
 
 	lines := strings.Split(str, "\n")
@@ -161,7 +160,7 @@ func ParseSourcetable(in []byte) (Sourcetable, []error) {
 			}
 			table.Networks = append(table.Networks, net)
 		case "STR":
-			mount, err := ParseMountEntry(line)
+			mount, err := ParseStreamEntry(line)
 			if err != nil {
 				errs = append(errs, errors.Wrapf(err, "parsing line %v", lineNo))
 			}
@@ -233,9 +232,9 @@ func ParseNetworkEntry(netString string) (NetworkEntry, error) {
 
 }
 
-// ParseMountEntry parses a single mount entry.
-func ParseMountEntry(mountString string) (MountEntry, error) {
-	parts := strings.Split(mountString, ";")
+// ParseStreamEntry parses a single mount entry.
+func ParseStreamEntry(streamString string) (MountEntry, error) {
+	parts := strings.Split(streamString, ";")
 
 	lat, err := strconv.ParseFloat(parts[9], 64)
 	if err != nil {
