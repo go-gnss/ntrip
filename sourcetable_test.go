@@ -3,8 +3,10 @@ package ntrip
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"testing"
 
+	"github.com/gobuffalo/httptest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -199,18 +201,32 @@ func TestDecodeSourcetable(t *testing.T) {
 
 func TestGetSourcetable(t *testing.T) {
 
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
-
 	// Arrange
 	ctx := context.Background()
-	url := "http://auscors.ga.gov.au:2101"
+
+	table := `
+		CAS;auscors.ga.gov.au;2101;AUSCORS Ntrip Broadcaster;GA;0;AUS;-35.34;149.18
+		NET;ARGN;GA;B;N;http://www.ga.gov.au;https://gws.geodesy.ga.gov.au/skeletonFiles/;gnss@ga.gov.au;
+		NET;IGS;IGS;B;N;https://igs.bkg.bund.de/root_ftp/NTRIP/streams/streamlist_igs-ip.htm;https://igs.bkg.bund.de:443/root_ftp/MGEX/station/rnxskl/;http://register.rtcm-ntrip.org;none
+		STR;31NA00AUS0;Alice Springs AZRI (NT);RTCM 3.2;1006(10),1013(10),1019(60),1020(60),1033(10),1042(60),1044(60),1046(60),1077(1),1087(1),1097(1),1117(1),1127(1),1230(10);2;GPS+GLO+GAL+BDS+QZS;APREF;AUS;-23.76698;133.87921;0;0;SEPT POLARX4TR;none;B;N;9600;DLP
+		STR;ALBY00AUS0;Albany (WA);RTCM 3.2;1006(10),1013(10),1019(60),1020(60),1033(10),1042(60),1044(60),1046(60),1077(1),1087(1),1097(1),1117(1),1127(1),1230(10);2;GPS+GLO+GAL+BDS+QZS;AUSCOPE;AUS;-34.95023;117.81018;0;0;SEPT POLARX5;none;B;N;9600;Landgate
+		STR;ALIC00AUS0;Alice Springs (NT);RTCM 3.2;1006(10),1013(10),1019(60),1020(60),1033(10),1042(60),1044(60),1046(60),1077(1),1087(1),1097(1),1117(1),1127(1),1230(10);2;GPS+GLO+GAL+BDS+QZS;ARGN;AUS;-23.67012;133.88551;0;0;SEPT POLARX5;none;B;N;9600;GA
+		ENDSOURCETABLE
+		`
+
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, table)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(handler))
+	defer server.Close()
 
 	// Act
-	mapping, err := GetSourcetable(ctx, url)
+	mapping, warnings, err := GetSourcetable(ctx, server.URL)
 
 	// Assert
-	require.Nil(t, err, "error fetching source table")
-	require.NotNil(t, mapping, "got an empty source table")
+	require.Nil(t, err, "got error getting sourcetable")
+	require.Len(t, warnings, 3, "got improper number of warnings")
+	expected, _ := ParseSourcetable(table)
+	require.Equal(t, expected, mapping)
 }
