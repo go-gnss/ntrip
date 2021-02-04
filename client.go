@@ -21,7 +21,7 @@ type ClientV2 struct {
 	Password string
 }
 
-func NewClient(url string) Client {
+func NewClientV2(url string) *ClientV2 {
 	return &ClientV2{
 		Client: http.Client{
 			Timeout: 5 * time.Second,
