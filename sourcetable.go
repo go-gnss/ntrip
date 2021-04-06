@@ -28,7 +28,13 @@ func (st Sourcetable) String() (s string) {
 	}
 
 	for _, str := range st.Mounts {
-		s = fmt.Sprintf("%s%s\r\n", s, str)
+		// Returning joined strings instead of sprintf significantly reduced allocs when benchmarking. The old code is
+		// commented out below for further analysis. There is a benchmark test that can be used
+		// to compare these results:
+		// go test ./... -run none -bench=. -benchmem -benchtime 3s
+		// Make sure your computer is somewhat idle before running benchmarks.
+		s = s + str.String() + "\r\n"
+		// s = fmt.Sptintf("%s%s\r\n", s, str)
 	}
 
 	return s + "ENDSOURCETABLE\r\n"
@@ -125,10 +131,21 @@ func (m StreamEntry) String() string {
 		fee = "Y"
 	}
 
-	return fmt.Sprintf("STR;%s;%s;%s;%s;%s;%s;%s;%s;%.4f;%.4f;%s;%s;%s;%s;%s;%s;%d;%s",
-		m.Name, m.Identifier, m.Format, m.FormatDetails, m.Carrier, m.NavSystem, m.Network,
-		m.CountryCode, m.Latitude, m.Longitude, nmea, solution, m.Generator, m.Compression,
-		m.Authentication, fee, m.Bitrate, m.Misc)
+	// Returning joined strings significantly reduced allocs when benchmarking. The old code is
+	// commented out below for further analysis. There is a benchmark test that can be used
+	// to compare these results:
+	// go test ./... -run none -bench=. -benchmem -benchtime 3s
+	// Make sure your computer is somewhat idle before running benchmarks.
+	return strings.Join([]string{
+		"STR", m.Name, m.Identifier, m.Format, m.FormatDetails, m.Carrier, m.NavSystem,
+		m.Network, m.CountryCode, fmt.Sprintf("%.4f", m.Latitude), fmt.Sprintf("%.4f", m.Longitude),
+		nmea, solution, m.Generator, m.Compression, m.Authentication, fee, fmt.Sprintf("%d", m.Bitrate), m.Misc,
+	}, ";")
+
+	// return fmt.Sprintf("STR;%s;%s;%s;%s;%s;%s;%s;%s;%.4f;%.4f;%s;%s;%s;%s;%s;%s;%d;%s",
+	// m.Name, m.Identifier, m.Format, m.FormatDetails, m.Carrier, m.NavSystem, m.Network,
+	// m.CountryCode, m.Latitude, m.Longitude, nmea, solution, m.Generator, m.Compression,
+	// m.Authentication, fee, m.Bitrate, m.Misc)
 }
 
 // GetSourcetable fetches a source table from a specific caster.
