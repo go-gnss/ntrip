@@ -127,9 +127,9 @@ func TestDecodeSourcetable(t *testing.T) {
 	// Arrange
 	var (
 		table = `
-		CAS;auscors.ga.gov.au;2101;AUSCORS Ntrip Broadcaster;GA;0;AUS;-35.34;149.18
+		CAS;auscors.ga.gov.au;2101;AUSCORS Ntrip Broadcaster;GA;0;AUS;-35.34;149.18;http://something;5454;misc
 		CAS;rtcm-ntrip.org;2101;NtripInfoCaster;BKG;0;DEU;50.12;8.69;0.0.0.0;0;http://www.rtcm-ntrip.org/home
-		NET;ARGN;GA;B;N;http://www.ga.gov.au;https://gws.geodesy.ga.gov.au/skeletonFiles/;gnss@ga.gov.au;
+		NET;ARGN;GA;B;N;http://www.ga.gov.au;https://gws.geodesy.ga.gov.au/skeletonFiles/;gnss@ga.gov.au;xyz
 		NET;AUSCOPE;GA;B;N;http://www.ga.gov.au;https://gws.geodesy.ga.gov.au/skeletonFiles/;gnss@ga.gov.au;
 		NET;SPRGN;GA;B;N;http://www.ga.gov.au;https://gws.geodesy.ga.gov.au/skeletonFiles/;gnss@ga.gov.au;
 		NET;APREF;GA;B;N;http://www.ga.gov.au;https://gws.geodesy.ga.gov.au/skeletonFiles/;gnss@ga.gov.au;
@@ -152,7 +152,7 @@ func TestDecodeSourcetable(t *testing.T) {
 
 	// Assert
 	// should report the three 'errors' from the first caster not matching the spec
-	require.Len(t, err, 3, "error decoding source table")
+	require.Len(t, err, 0, "error decoding source table")
 
 	// Assert Casters
 	require.Len(t, sourcetable.Casters, 2, "wrong number of casters")
@@ -164,6 +164,9 @@ func TestDecodeSourcetable(t *testing.T) {
 	require.Equal(t, "AUS", sourcetable.Casters[0].Country)
 	require.Equal(t, float32(-35.34), sourcetable.Casters[0].Latitude)
 	require.Equal(t, float32(149.18), sourcetable.Casters[0].Longitude)
+	require.Equal(t, "http://something", sourcetable.Casters[0].FallbackHostAddress)
+	require.Equal(t, 5454, sourcetable.Casters[0].FallbackHostPort)
+	require.Equal(t, "misc", sourcetable.Casters[0].Misc)
 
 	require.Equal(t, "0.0.0.0", sourcetable.Casters[1].FallbackHostAddress)
 	require.Equal(t, 0, sourcetable.Casters[1].FallbackHostPort)
@@ -178,6 +181,7 @@ func TestDecodeSourcetable(t *testing.T) {
 	require.Equal(t, "http://www.ga.gov.au", sourcetable.Networks[0].NetworkInfoURL)
 	require.Equal(t, "https://gws.geodesy.ga.gov.au/skeletonFiles/", sourcetable.Networks[0].StreamInfoURL)
 	require.Equal(t, "gnss@ga.gov.au", sourcetable.Networks[0].RegistrationAddress)
+	require.Equal(t, "xyz", sourcetable.Networks[0].Misc)
 
 	// Assert Mount
 	// STR;31NA00AUS0;Alice Springs AZRI (NT);RTCM 3.2;1006(10),1013(10),1019(60),1020(60),1033(10),1042(60),1044(60),1046(60),1077(1),1087(1),1097(1),1117(1),1127(1),1230(10);2;GPS+GLO+GAL+BDS+QZS;APREF;AUS;-23.76698;133.87921;0;0;SEPT POLARX4TR;none;B;N;9600;DLP
@@ -197,6 +201,7 @@ func TestDecodeSourcetable(t *testing.T) {
 	require.Equal(t, "SEPT POLARX4TR", sourcetable.Mounts[0].Generator)
 	require.Equal(t, "none", sourcetable.Mounts[0].Compression)
 	require.Equal(t, 9600, sourcetable.Mounts[0].Bitrate)
+	require.Equal(t, "DLP", sourcetable.Mounts[0].Misc)
 }
 
 func TestGetSourcetable(t *testing.T) {
