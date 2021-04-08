@@ -9,7 +9,58 @@ import (
 
 func BenchmarkSourcetableString(b *testing.B) {
 
-	sourcetable := ntrip.Sourcetable{}
+	sourcetable := ntrip.Sourcetable{
+		Casters: []ntrip.CasterEntry{
+			{
+				Host:                "host",
+				Port:                2101,
+				Identifier:          "identifier",
+				Operator:            "operator",
+				NMEA:                false,
+				Country:             "AUS",
+				Latitude:            0.1,
+				Longitude:           -0.1,
+				FallbackHostAddress: "fallback",
+				FallbackHostPort:    12101,
+				Misc:                "misc",
+			},
+			{
+				Host:                "host2",
+				Port:                2102,
+				Identifier:          "identifier2",
+				Operator:            "operator2",
+				NMEA:                true,
+				Country:             "AUS",
+				Latitude:            -0.1,
+				Longitude:           0.1,
+				FallbackHostAddress: "fallback2",
+				FallbackHostPort:    12102,
+				Misc:                "misc2",
+			},
+		},
+		Networks: []ntrip.NetworkEntry{
+			{
+				Identifier:          "identifier",
+				Operator:            "operator",
+				Authentication:      "B",
+				Fee:                 false,
+				NetworkInfoURL:      "https://network.info",
+				StreamInfoURL:       "https://stream.info",
+				RegistrationAddress: "register@operator.io",
+				Misc:                "misc",
+			},
+			{
+				Identifier:          "identifier2",
+				Operator:            "operator2",
+				Authentication:      "N",
+				Fee:                 true,
+				NetworkInfoURL:      "https://network2.info",
+				StreamInfoURL:       "https://stream2.info",
+				RegistrationAddress: "register2@operator.io",
+				Misc:                "misc2",
+			},
+		},
+	}
 
 	for i := 0; i < 10000; i++ {
 		sourcetable.Mounts = append(sourcetable.Mounts, ntrip.StreamEntry{
