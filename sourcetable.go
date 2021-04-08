@@ -18,20 +18,25 @@ type Sourcetable struct {
 	Mounts   []StreamEntry
 }
 
-func (st Sourcetable) String() (s string) {
+func (st Sourcetable) String() string {
+
+	stLength := (len(st.Casters) + len(st.Networks) + len(st.Mounts) + 1)
+	stStrs := make([]string, 0, stLength)
+
 	for _, cas := range st.Casters {
-		s = fmt.Sprintf("%s%s\r\n", s, cas)
+		stStrs = append(stStrs, cas.String())
 	}
 
 	for _, net := range st.Networks {
-		s = fmt.Sprintf("%s%s\r\n", s, net)
+		stStrs = append(stStrs, net.String())
 	}
 
 	for _, str := range st.Mounts {
-		s = fmt.Sprintf("%s%s\r\n", s, str)
+		stStrs = append(stStrs, str.String())
 	}
 
-	return s + "ENDSOURCETABLE\r\n"
+	stStrs = append(stStrs, "ENDSOURCETABLE\r\n")
+	return strings.Join(stStrs, "\r\n")
 }
 
 // CasterEntry for an NTRIP Sourcetable
@@ -55,9 +60,16 @@ func (c CasterEntry) String() string {
 		nmea = "1"
 	}
 
-	return fmt.Sprintf("CAS;%s;%d;%s;%s;%s;%s;%.4f;%.4f;%s;%d;%s",
-		c.Host, c.Port, c.Identifier, c.Operator, nmea, c.Country, c.Latitude, c.Longitude,
-		c.FallbackHostAddress, c.FallbackHostPort, c.Misc)
+	port := strconv.FormatInt(int64(c.Port), 10)
+	fallbackPort := strconv.FormatInt(int64(c.FallbackHostPort), 10)
+
+	lat := strconv.FormatFloat(float64(c.Latitude), 'f', 4, 32)
+	lng := strconv.FormatFloat(float64(c.Longitude), 'f', 4, 32)
+
+	return strings.Join([]string{
+		"CAS", c.Host, port, c.Identifier, c.Operator, nmea, c.Country, lat, lng,
+		c.FallbackHostAddress, fallbackPort, c.Misc,
+	}, ";")
 }
 
 // NetworkEntry for an NTRIP Sourcetable
@@ -80,9 +92,9 @@ func (n NetworkEntry) String() string {
 		fee = "Y"
 	}
 
-	return fmt.Sprintf("NET;%s;%s;%s;%s;%s;%s;%s;%s",
+	return strings.Join([]string{"NET",
 		n.Identifier, n.Operator, n.Authentication, fee, n.NetworkInfoURL, n.StreamInfoURL,
-		n.RegistrationAddress, n.Misc)
+		n.RegistrationAddress, n.Misc}, ";")
 }
 
 // StreamEntry for an NTRIP Sourcetable
@@ -125,10 +137,26 @@ func (m StreamEntry) String() string {
 		fee = "Y"
 	}
 
-	return fmt.Sprintf("STR;%s;%s;%s;%s;%s;%s;%s;%s;%.4f;%.4f;%s;%s;%s;%s;%s;%s;%d;%s",
-		m.Name, m.Identifier, m.Format, m.FormatDetails, m.Carrier, m.NavSystem, m.Network,
-		m.CountryCode, m.Latitude, m.Longitude, nmea, solution, m.Generator, m.Compression,
-		m.Authentication, fee, m.Bitrate, m.Misc)
+	bitrate := strconv.FormatInt(int64(m.Bitrate), 10)
+
+	lat := strconv.FormatFloat(float64(m.Latitude), 'f', 4, 32)
+	lng := strconv.FormatFloat(float64(m.Longitude), 'f', 4, 32)
+
+	// Returning joined strings significantly reduced allocs when benchmarking. The old code is
+	// commented out below for further analysis. There is a benchmark test that can be used
+	// to compare these results:
+	// go test ./... -run none -bench=. -benchmem -benchtime 3s
+	// Make sure your computer is somewhat idle before running benchmarks.
+	return strings.Join([]string{
+		"STR", m.Name, m.Identifier, m.Format, m.FormatDetails, m.Carrier, m.NavSystem,
+		m.Network, m.CountryCode, lat, lng,
+		nmea, solution, m.Generator, m.Compression, m.Authentication, fee, bitrate, m.Misc,
+	}, ";")
+
+	// return fmt.Sprintf("STR;%s;%s;%s;%s;%s;%s;%s;%s;%.4f;%.4f;%s;%s;%s;%s;%s;%s;%d;%s",
+	// m.Name, m.Identifier, m.Format, m.FormatDetails, m.Carrier, m.NavSystem, m.Network,
+	// m.CountryCode, m.Latitude, m.Longitude, nmea, solution, m.Generator, m.Compression,
+	// m.Authentication, fee, m.Bitrate, m.Misc)
 }
 
 // GetSourcetable fetches a source table from a specific caster.
