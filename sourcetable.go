@@ -283,6 +283,7 @@ func ParseNetworkEntry(netString string) (NetworkEntry, []error) {
 		NetworkInfoURL:      p.parseString(5, "network info url"),
 		StreamInfoURL:       p.parseString(6, "stream info url"),
 		RegistrationAddress: p.parseString(7, "registration address"),
+		Misc:                p.parseString(8, "misc"),
 	}, p.errors
 
 }
@@ -312,6 +313,7 @@ func ParseStreamEntry(streamString string) (StreamEntry, []error) {
 		Authentication: p.parseString(15, "authentication"),
 		Fee:            p.parseBool(16, "N", "fee"),
 		Bitrate:        p.parseInt(17, "bitrate"),
+		Misc:           p.parseString(18, "misc"),
 	}
 
 	return streamEntry, p.errs()
