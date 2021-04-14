@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/sirupsen/logrus"
 )
@@ -226,8 +225,6 @@ func write(ctx context.Context, c chan []byte, w io.Writer, flush func() error) 
 			flush() // TODO: Check for error in flush?
 		case <-ctx.Done():
 			return fmt.Errorf("client disconnect")
-		case <-time.After(5 * time.Second): // TODO: Configurable timeout
-			return fmt.Errorf("timeout reading from subscriber channel")
 		}
 	}
 }
