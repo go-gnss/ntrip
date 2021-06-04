@@ -33,7 +33,7 @@ func _TestInMemoryService(t *testing.T) {
 	go func() {
 		r, w := io.Pipe()
 		for {
-			req, _ := ntrip.NewServerRequestV2("http://localhost:2101/TEST00AUS0", r)
+			req, _ := ntrip.NewServerRequest("http://localhost:2101/TEST00AUS0", r)
 			req.SetBasicAuth("username", "password")
 			resp, err := http.DefaultClient.Do(req)
 			if err == nil && resp.StatusCode == 200 {

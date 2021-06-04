@@ -25,7 +25,7 @@ func TestCasterServerClient(t *testing.T) {
 
 	// Server
 	{
-		sreq, _ := ntrip.NewServerRequestV2(ts.URL+mock.MountPath, r)
+		sreq, _ := ntrip.NewServerRequest(ts.URL+mock.MountPath, r)
 		sreq.SetBasicAuth(mock.Username, mock.Password)
 		sresp, err := http.DefaultClient.Do(sreq)
 		if err != nil {
@@ -86,7 +86,7 @@ func testV1Client(t *testing.T, host, path string, serverWriter io.Writer) {
 }
 
 func testV2Client(t *testing.T, url string, serverWriter io.Writer) {
-	req, _ := ntrip.NewClientRequestV2(url)
+	req, _ := ntrip.NewClientRequest(url)
 	req.SetBasicAuth(mock.Username, mock.Password)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
