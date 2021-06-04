@@ -29,7 +29,7 @@ func main() {
 	go serve(*destination, *destUsername, *destPassword, *timeout)
 
 	// Write response body to PipeWriter
-	client, _ := ntrip.NewClientRequestV2(*source)
+	client, _ := ntrip.NewClientRequest(*source)
 	client.SetBasicAuth(*sourceUsername, *sourcePassword)
 	for ; ; time.Sleep(time.Second * *timeout) {
 		resp, err := http.DefaultClient.Do(client)
@@ -53,7 +53,7 @@ func main() {
 func serve(url, username, password string, timeout time.Duration) {
 	for ; ; time.Sleep(time.Second * timeout) {
 		reader, writer = io.Pipe()
-		req, _ := ntrip.NewServerRequestV2(url, reader)
+		req, _ := ntrip.NewServerRequest(url, reader)
 		req.SetBasicAuth(username, password)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil || resp.StatusCode != 200 {
