@@ -10,6 +10,9 @@ import (
 // NewClientRequest constructs an http.Request which can be used as an NTRIP v2 Client
 func NewClientRequest(url string) (*http.Request, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return req, err
+	}
 	req.Header.Set("User-Agent", "NTRIP go-gnss/ntrip/client")
 	req.Header.Set(NTRIPVersionHeaderKey, NTRIPVersionHeaderValueV2)
 	return req, err
