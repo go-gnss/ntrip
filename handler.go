@@ -2,7 +2,6 @@ package ntrip
 
 import (
 	"bufio"
-	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -81,15 +80,11 @@ func (h *handler) handleGetSourcetableV1(w *bufio.ReadWriter, r *http.Request) {
 		h.logger.Warnf("error flushing data to client: %s", err)
 		return
 	}
-
-	h.logger.Info("sourcetable written to client")
 }
 
 func (h *handler) handleGetMountV1(w *bufio.ReadWriter, r *http.Request) {
-	username, password, _ := r.BasicAuth()
-	sub, err := h.svc.Subscriber(r.Context(), r.URL.Path[1:], username, password)
+	sub, err := h.svc.Subscriber(r.Context(), r)
 	if err != nil {
-		h.logger.Infof("connection refused with reason: %s", err)
 		// NTRIP v1 says to return 401 for unauthorized, but sourcetable for any other error
 		if err == ErrorNotAuthorized {
 			// TODO: Check errors in writing and flushing
@@ -105,10 +100,9 @@ func (h *handler) handleGetMountV1(w *bufio.ReadWriter, r *http.Request) {
 	// TODO: Check error in Write and Flush
 	w.Write([]byte("ICY 200 OK\r\n")) // NTRIP v1 is ICECAST, this is the equivalent of HTTP 200 OK
 	w.Flush()
-	h.logger.Infof("accepted request")
 
-	err = write(r.Context(), sub, w, w.Flush)
-	h.logger.Infof("connection closed with reason: %s", err)
+	// TODO: Does this flush data to client?
+	_, err = io.Copy(w, sub)
 }
 
 func (h *handler) handleRequestV2(w http.ResponseWriter, r *http.Request) {
@@ -154,14 +148,11 @@ func (h *handler) handleGetSourcetableV2(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	h.logger.Info("sourcetable written to client")
 }
 
 func (h *handler) handlePostMountV2(w http.ResponseWriter, r *http.Request) error {
-	username, password, _ := r.BasicAuth()
-	pub, err := h.svc.Publisher(r.Context(), r.URL.Path[1:], username, password)
+	pub, err := h.svc.Publisher(r.Context(), r)
 	if err != nil {
-		h.logger.Infof("connection refused with reason: %s", err)
 		return err
 	}
 	defer pub.Close()
@@ -169,7 +160,6 @@ func (h *handler) handlePostMountV2(w http.ResponseWriter, r *http.Request) erro
 	// Write response headers in order for client to begin sending data
 	// TODO: Check if type cast is successful
 	w.(http.Flusher).Flush()
-	h.logger.Infof("accepted request")
 
 	_, err = io.Copy(pub, r.Body)
 	if err == nil {
@@ -178,15 +168,12 @@ func (h *handler) handlePostMountV2(w http.ResponseWriter, r *http.Request) erro
 	}
 
 	// Duplicating connection closed message here to avoid superfluous calls to WriteHeader
-	h.logger.Infof("connection closed with reason: %s", err)
 	return nil
 }
 
 func (h *handler) handleGetMountV2(w http.ResponseWriter, r *http.Request) error {
-	username, password, _ := r.BasicAuth()
-	sub, err := h.svc.Subscriber(r.Context(), r.URL.Path[1:], username, password)
+	sub, err := h.svc.Subscriber(r.Context(), r)
 	if err != nil {
-		h.logger.Infof("connection refused with reason: %s", err)
 		return err
 	}
 
@@ -194,39 +181,11 @@ func (h *handler) handleGetMountV2(w http.ResponseWriter, r *http.Request) error
 	// Flush response headers before sending data to client, default status code is 200
 	// TODO: Don't necessarily need to do this, since the first data written to client will flush
 	w.(http.Flusher).Flush()
-	h.logger.Infof("accepted request")
 
-	// bufio.ReadWriter's Flush method (used by v1 handler) returns error so does not satisfy the
-	// http.Flusher interface
-	flush := func() error {
-		// TODO: Check if cast succeeds and return error if not
-		w.(http.Flusher).Flush()
-		return nil
-	}
-
-	err = write(r.Context(), sub, w, flush)
+	// TODO: This won't flush periodically?
+	_, err = io.Copy(w, sub)
 	// Duplicating connection closed message here to avoid superfluous calls to WriteHeader
-	h.logger.Infof("connection closed with reason: %s", err)
 	return nil
-}
-
-// Used by the GET handlers to read data from Subscriber channel and write to client writer
-// TODO: Better name
-func write(ctx context.Context, c chan []byte, w io.Writer, flush func() error) error {
-	for {
-		select {
-		case data, ok := <-c:
-			if !ok {
-				return fmt.Errorf("subscriber channel closed")
-			}
-			if _, err := w.Write(data); err != nil {
-				return err
-			}
-			flush() // TODO: Check for error in flush?
-		case <-ctx.Done():
-			return fmt.Errorf("client disconnect")
-		}
-	}
 }
 
 // Spec says that WWW-Authenticate header is required for casters

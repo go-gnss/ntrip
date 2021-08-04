@@ -3,7 +3,7 @@ package mock
 import (
 	"context"
 	"io"
-	"time"
+	"net/http"
 
 	"github.com/go-gnss/ntrip"
 )
@@ -15,12 +15,15 @@ const (
 	Password  string = "password"
 )
 
-var ()
+var (
+	// Ensure mock meets interface requirements
+	_ ntrip.SourceService = &MockSourceService{}
+)
 
 // MockSourceService implements ntrip.SourceService, copying data from a single connected server
 // (mount name TEST00AUS0) into a channel
 type MockSourceService struct {
-	DataChannel chan []byte
+	Reader      io.ReadCloser
 	Sourcetable ntrip.Sourcetable
 }
 
@@ -45,80 +48,45 @@ func (m *MockSourceService) GetSourcetable() ntrip.Sourcetable {
 	return m.Sourcetable
 }
 
-func (m *MockSourceService) Subscriber(ctx context.Context, mount, username, password string) (chan []byte, error) {
+func (m *MockSourceService) Subscriber(ctx context.Context, r *http.Request) (io.ReadCloser, error) {
+	username, password, _ := r.BasicAuth()
 	if username != Username || password != Password {
 		return nil, ntrip.ErrorNotAuthorized
 	}
 
-	if mount != MountName {
+	if r.URL.Path != MountPath {
 		return nil, ntrip.ErrorNotFound
 	}
 
-	if m.DataChannel == nil {
+	if m.Reader == nil {
 		return nil, ntrip.ErrorNotFound
 	}
 
-	return m.DataChannel, nil
+	return m.Reader, nil
 }
 
-func (m *MockSourceService) Publisher(ctx context.Context, mount string, username string, password string) (io.WriteCloser, error) {
+func (m *MockSourceService) Publisher(ctx context.Context, r *http.Request) (io.WriteCloser, error) {
+	username, password, _ := r.BasicAuth()
 	if username != Username || password != Password {
 		return nil, ntrip.ErrorNotAuthorized
 	}
 
-	if mount != MountName {
+	if r.URL.Path != MountPath {
 		return nil, ntrip.ErrorNotFound
 	}
 
-	if m.DataChannel != nil {
+	if m.Reader != nil {
 		return nil, ntrip.ErrorConflict
 	}
 
-	m.DataChannel = make(chan []byte, 1)
-	return channelWriter(ctx, m), nil
-}
+	reader, writer := io.Pipe()
+	m.Reader = reader
 
-// Copies data from the returned WriteCloser to m.DataChannel, closing the channel when WriteCloser is closed
-func channelWriter(ctx context.Context, m *MockSourceService) io.WriteCloser {
-	r, w := io.Pipe()
-
-	type asyncResp struct { // I wish Go had tuples
-		bytesRead int
-		err       error
-	}
-
-	// Wraps r.Read so it can happen asynchronously, allowing timeouts etc. with select statement
-	readAsync := func(buf []byte) chan asyncResp {
-		c := make(chan asyncResp, 1)
-		go func() {
-			br, err := r.Read(buf)
-			c <- asyncResp{br, err}
-		}()
-		return c
-	}
-
-	// Read data from r and write to m.DataChannel, with timeouts and context checks
 	go func() {
-	OUTER:
-		for {
-			buf := make([]byte, 1024)
-			select {
-			case resp := <-readAsync(buf):
-				if resp.err != nil {
-					break OUTER
-				}
-				m.DataChannel <- buf[:resp.bytesRead]
-			case <-time.After(1 * time.Second):
-			case <-ctx.Done():
-				break OUTER
-			}
-		}
-
-		// Closing the channel signals to any Subscriber's that the connection should be closed
-		close(m.DataChannel)
-		// Reset to nil so future calls to Publisher do not return "mount in use" error
-		m.DataChannel = nil
+		<-ctx.Done()
+		m.Reader = nil
+		reader.Close()
 	}()
 
-	return w
+	return writer, nil
 }

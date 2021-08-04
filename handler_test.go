@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/http"
@@ -49,7 +50,7 @@ func TestCasterHandlers(t *testing.T) {
 		TestName string
 
 		// Inputs
-		ChannelData        string // for GET requests, written to mockSourceService channel before connecting
+		ServerData         string // for GET requests, written to mockSourceService channel before connecting
 		RequestMethod      string
 		RequestURL         string
 		RequestBody        string
@@ -60,8 +61,8 @@ func TestCasterHandlers(t *testing.T) {
 		ResponseCode int
 		ResponseBody string
 	}{
-		{"v2 Sourcetable Success", "N/A", http.MethodGet, "/", "", "", "", 2, 200, v2Sourcetable},
 		{"v2 POST Success", "N/A", http.MethodPost, mock.MountPath, "wow", mock.Username, mock.Password, 2, 200, ""},
+		{"v2 Sourcetable Success", "N/A", http.MethodGet, "/", "", "", "", 2, 200, v2Sourcetable},
 		{"v2 GET Success", "v2 GET Success", http.MethodGet, mock.MountPath, "", mock.Username, mock.Password, 2, 200, "v2 GET Success"},
 		{"v2 GET Unauthorized", "N/A", http.MethodGet, mock.MountPath, "", "", "", 2, 401, ""},
 		{"v2 GET Not Found", "N/A", http.MethodGet, "/NotFound", "", mock.Username, mock.Password, 2, 404, ""},
@@ -83,6 +84,9 @@ func TestCasterHandlers(t *testing.T) {
 			req.Header.Add(ntrip.NTRIPVersionHeaderKey, ntrip.NTRIPVersionHeaderValueV2)
 		}
 		req.SetBasicAuth(tc.Username, tc.Password)
+		if tc.RequestMethod == http.MethodPost {
+			req.Body.Close()
+		}
 
 		rr := &HijackableResponseRecorder{httptest.NewRecorder()}
 		// v1 responses don't actually return a code, but the httptest.ResponseRecorder default is
@@ -90,18 +94,13 @@ func TestCasterHandlers(t *testing.T) {
 		rr.Code = 0
 
 		ms := mock.NewMockSourceService()
-
-		// Write tc.ChannelData to ms.DataChannel for GET requests so they receive data in the
-		// response Body
 		if tc.RequestMethod == http.MethodGet {
-			ms.DataChannel = make(chan []byte, 1)
-			ms.DataChannel <- []byte(tc.ChannelData)
-			// Close channel once client reads from it so we don't have to wait for client timeouts
-			// TODO: These will only be closed by successful GET test cases, does this matter?
+			r, w := io.Pipe()
+			ms.Reader = r
 			go func() {
-				// The channel is size 1, so this will block until the GET request client reads
-				ms.DataChannel <- []byte{}
-				close(ms.DataChannel)
+				// Write blocks until GET request connects and reads
+				w.Write([]byte(tc.ServerData))
+				r.Close()
 			}()
 		}
 
@@ -117,6 +116,12 @@ func TestCasterHandlers(t *testing.T) {
 		}
 	}
 }
+
+// This is tested independently of the above due to
+//func TestCasterPOSTHandler(t *testing.T) {
+//
+//		{"v2 POST Success", "N/A", http.MethodPost, mock.MountPath, "wow", mock.Username, mock.Password, 2, 200, ""},
+//}
 
 // Runs Publishing NTRIP Server client asynchronously and writes to chan when done
 func asyncServer(t *testing.T, testName string, caster *ntrip.Caster, data string) chan bool {
@@ -206,7 +211,7 @@ func TestAsyncPublishSubscribe(t *testing.T) {
 func TestMountInUse(t *testing.T) {
 	ms := mock.NewMockSourceService()
 	// MockSourceService returns ntrip.ErrorConflict if DataChannel is not nil
-	ms.DataChannel = make(chan []byte, 1)
+	ms.Reader = ioutil.NopCloser(strings.NewReader(""))
 
 	req, _ := http.NewRequest(http.MethodPost, mock.MountPath, strings.NewReader("N/A"))
 	req.Header.Add(ntrip.NTRIPVersionHeaderKey, ntrip.NTRIPVersionHeaderValueV2)

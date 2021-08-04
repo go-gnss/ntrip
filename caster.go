@@ -14,13 +14,8 @@ import (
 // SourceService represents a provider of stream data
 type SourceService interface {
 	GetSourcetable() Sourcetable
-	// TODO: Specifying username and password may be limiting, could instead take the content of
-	//  the auth header
-	// TODO: A SourceService implementation can't support nearest base functionality because it
-	//  wouldn't have access to NMEA headers - in general, it may be arbitrarily limiting to not
-	//  pass the http.Request object (leaving it up to the implementation to parse headers etc.)
-	Publisher(ctx context.Context, mount, username, password string) (io.WriteCloser, error)
-	Subscriber(ctx context.Context, mount, username, password string) (chan []byte, error)
+	Publisher(ctx context.Context, request *http.Request) (io.WriteCloser, error)
+	Subscriber(ctx context.Context, request *http.Request) (io.ReadCloser, error)
 }
 
 // Caster wraps http.Server, it provides nothing but timeouts and the Handler
@@ -62,13 +57,12 @@ func getHandler(svc SourceService, logger logrus.FieldLogger) http.Handler {
 		requestID := uuid.New().String()
 		ctx := context.WithValue(r.Context(), RequestIDContextKey, requestID)
 
-		l := logger.WithFields(logrus.Fields{
-			"request_id":      requestID,
-			"request_version": requestVersion,
-			"path":            r.URL.Path,
-			"method":          r.Method,
-			"source_ip":       r.RemoteAddr,
-		})
+		l := logger.WithField("request_id", requestID).
+			WithField("request_version", requestVersion).
+			WithField("path", r.URL.Path).
+			WithField("method", r.Method).
+			WithField("source_ip", r.RemoteAddr).
+			WithField("user_agent", r.Header.Get("User-Agent"))
 
 		h := &handler{svc, l}
 		h.handleRequest(w, r.WithContext(ctx))
