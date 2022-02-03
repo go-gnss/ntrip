@@ -102,9 +102,15 @@ func (h *handler) handleGetMountV1(w *bufio.ReadWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Check error in Write and Flush
-	w.Write([]byte("ICY 200 OK\r\n")) // NTRIP v1 is ICECAST, this is the equivalent of HTTP 200 OK
-	w.Flush()
+	_, err = w.Write([]byte("ICY 200 OK\r\n")) // NTRIP v1 is ICECAST, this is the equivalent of HTTP 200 OK
+	if err != nil {
+		h.logger.WithError(err).Error("failed to write response headers")
+		return
+	}
+	if err := w.Flush(); err != nil {
+		h.logger.WithError(err).Error("error flushing response headers")
+		return
+	}
 	h.logger.Infof("accepted request")
 
 	err = write(r.Context(), sub, w, w.Flush)
@@ -222,7 +228,9 @@ func write(ctx context.Context, c chan []byte, w io.Writer, flush func() error) 
 			if _, err := w.Write(data); err != nil {
 				return err
 			}
-			flush() // TODO: Check for error in flush?
+			if err := flush(); err != nil {
+				return err
+			}
 		case <-ctx.Done():
 			return fmt.Errorf("client disconnect")
 		}

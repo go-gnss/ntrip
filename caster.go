@@ -62,12 +62,16 @@ func getHandler(svc SourceService, logger logrus.FieldLogger) http.Handler {
 		requestID := uuid.New().String()
 		ctx := context.WithValue(r.Context(), RequestIDContextKey, requestID)
 
+		username, _, _ := r.BasicAuth()
+
 		l := logger.WithFields(logrus.Fields{
 			"request_id":      requestID,
 			"request_version": requestVersion,
 			"path":            r.URL.Path,
 			"method":          r.Method,
 			"source_ip":       r.RemoteAddr,
+			"username":        username,
+			"user_agent":      r.UserAgent(),
 		})
 
 		h := &handler{svc, l}
