@@ -6,7 +6,7 @@ import (
 
 const (
 	NTRIPVersionHeaderKey     string = "Ntrip-Version"
-	NTRIPVersionHeaderValueV2 string = "NTRIP/2.0"
+	NTRIPVersionHeaderValueV2 string = "Ntrip/2.0"
 )
 
 // It's expected that SourceService implementations will use these errors to signal specific
