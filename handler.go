@@ -24,7 +24,7 @@ type handler struct {
 func (h *handler) handleRequest(w http.ResponseWriter, r *http.Request) {
 	h.logger.Debug("request received")
 	switch strings.ToUpper(r.Header.Get(NTRIPVersionHeaderKey)) {
-	case NTRIPVersionHeaderValueV2:
+	case strings.ToUpper(NTRIPVersionHeaderValueV2):
 		h.handleRequestV2(w, r)
 	default:
 		h.handleRequestV1(w, r)
