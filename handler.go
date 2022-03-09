@@ -24,7 +24,7 @@ type handler struct {
 func (h *handler) handleRequest(w http.ResponseWriter, r *http.Request) {
 	h.logger.Debug("request received")
 	switch strings.ToUpper(r.Header.Get(NTRIPVersionHeaderKey)) {
-	case NTRIPVersionHeaderValueV2:
+	case strings.ToUpper(NTRIPVersionHeaderValueV2):
 		h.handleRequestV2(w, r)
 	default:
 		h.handleRequestV1(w, r)
@@ -71,7 +71,8 @@ func (h *handler) handleRequestV1(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) handleGetSourcetableV1(w *bufio.ReadWriter, r *http.Request) {
-	_, err := fmt.Fprintf(w, "SOURCETABLE 200 OK\r\n%s", h.svc.GetSourcetable())
+	st := h.svc.GetSourcetable()
+	_, err := fmt.Fprintf(w, "SOURCETABLE 200 OK\r\nConnection: close\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(st.String()), st)
 	if err != nil {
 		h.logger.Errorf("error writing sourcetable to client: %s", err)
 		return

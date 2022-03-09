@@ -41,8 +41,8 @@ func (h *HijackableResponseRecorder) Hijack() (net.Conn, *bufio.ReadWriter, erro
 }
 
 func TestCasterHandlers(t *testing.T) {
-	v1Sourcetable := fmt.Sprintf("SOURCETABLE 200 OK\r\n%s", mock.NewMockSourceService().Sourcetable.String())
 	v2Sourcetable := mock.NewMockSourceService().Sourcetable.String()
+	v1Sourcetable := fmt.Sprintf("SOURCETABLE 200 OK\r\nConnection: close\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(v2Sourcetable), v2Sourcetable)
 
 	// TODO: Consider making request headers an attribute
 	cases := []struct {
