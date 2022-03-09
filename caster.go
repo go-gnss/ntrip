@@ -55,7 +55,7 @@ func NewCaster(addr string, svc SourceService, logger logrus.FieldLogger) *Caste
 func getHandler(svc SourceService, logger logrus.FieldLogger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestVersion := 1
-		if strings.ToUpper(r.Header.Get(NTRIPVersionHeaderKey)) == NTRIPVersionHeaderValueV2 {
+		if strings.ToUpper(r.Header.Get(NTRIPVersionHeaderKey)) == strings.ToUpper(NTRIPVersionHeaderValueV2) {
 			requestVersion = 2
 		}
 

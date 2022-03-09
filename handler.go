@@ -155,7 +155,7 @@ func (h *handler) handleRequestV2(w http.ResponseWriter, r *http.Request) {
 
 func (h *handler) handleGetSourcetableV2(w http.ResponseWriter, r *http.Request) {
 	// TODO: Implement sourcetable filtering support
-	_, err := fmt.Fprintf(w, h.svc.GetSourcetable().String())
+	_, err := w.Write([]byte(h.svc.GetSourcetable().String()))
 	if err != nil {
 		h.logger.Warnf("error writing sourcetable to client: %s", err)
 		return
