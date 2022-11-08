@@ -92,15 +92,15 @@ func (h *handler) handleGetMountV1(w *bufio.ReadWriter, r *http.Request) {
 	sub, err := h.svc.Subscriber(r.Context(), r.URL.Path[1:], username, password)
 	if err != nil {
 		h.logger.Infof("connection refused with reason: %s", err)
-		// NTRIP v1 says to return 401 for unauthorized, but sourcetable for any other error
+		// NTRIP v1 says to return 401 for unauthorized, but sourcetable for any other error - this goes against that
 		if err == ErrorNotAuthorized {
-			// TODO: Check errors in writing and flushing
-			writeUnauthorizedV1(w, r)
-			w.Flush()
-			return
+			writeStatusV1(w, r, http.StatusUnauthorized)
+		} else if err == ErrorNotFound {
+			writeStatusV1(w, r, http.StatusNotFound)
+		} else {
+			writeStatusV1(w, r, http.StatusInternalServerError)
 		}
-
-		h.handleGetSourcetableV1(w, r)
+		w.Flush()
 		return
 	}
 
@@ -242,11 +242,11 @@ func write(ctx context.Context, c chan []byte, w io.Writer, flush func() error) 
 }
 
 // Spec says that WWW-Authenticate header is required for casters
-func writeUnauthorizedV1(w io.Writer, r *http.Request) error {
+func writeStatusV1(w io.Writer, r *http.Request, statusCode int) error {
 	// TODO: Not sure about setting the HTTP version
 	// TODO: Check for errors writing and flushing
 	resp := http.Response{
-		StatusCode: http.StatusUnauthorized,
+		StatusCode: statusCode,
 		ProtoMajor: 1,
 		ProtoMinor: 1,
 		Header: map[string][]string{
