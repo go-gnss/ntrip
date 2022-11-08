@@ -72,7 +72,7 @@ func TestCasterHandlers(t *testing.T) {
 		{"v1 GET Success", "v1 GET Success", http.MethodGet, mock.MountPath, "", mock.Username, mock.Password, 1, 0, "ICY 200 OK\r\nv1 GET Success"},
 		// Response recorder headers aren't correctly set when HTTP headers are written to the body, as happens with v1 unauthorized
 		{"v1 GET Unauthorized", "N/A", http.MethodGet, mock.MountPath, "", "", "", 1, 0, "HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nWWW-Authenticate: Basic realm=\"/TEST00AUS0\"\r\nContent-Length: 0\r\n\r\n"},
-		{"v1 GET Not Found", "N/A", http.MethodGet, "/NotFound", "", mock.Username, mock.Password, 1, 0, v1Sourcetable},
+		{"v1 GET Not Found", "N/A", http.MethodGet, "/NotFound", "", mock.Username, mock.Password, 1, 0, "HTTP/1.1 404 Not Found\r\nConnection: close\r\nWWW-Authenticate: Basic realm=\"/NotFound\"\r\nContent-Length: 0\r\n\r\n"},
 		// 501 happens before the response is hijacked
 		{"v1 POST Not Implemented", "N/A", http.MethodPost, "/any", "", mock.Username, mock.Password, 1, 501, ""},
 	}
