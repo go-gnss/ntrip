@@ -121,15 +121,9 @@ func TestCasterHandlers(t *testing.T) {
 // Runs Publishing NTRIP Server client asynchronously and writes to chan when done
 func asyncServer(t *testing.T, testName string, caster *ntrip.Caster, data string) chan bool {
 	done := make(chan bool, 1)
+	connected := make(chan struct{}, 1)
 
 	r, w := io.Pipe()
-
-	// Write blocks until POST request is connected
-	go func() {
-		w.Write([]byte(data))
-		time.Sleep(20 * time.Millisecond)
-		w.Close()
-	}()
 
 	// ServeHTTP will block until the PipeWriter is closed
 	go func() {
@@ -139,12 +133,25 @@ func asyncServer(t *testing.T, testName string, caster *ntrip.Caster, data strin
 
 		postrr := httptest.NewRecorder()
 		postrr.Code = 0 // Default response code is 200 which can lead to false positives
+
+		// Signal that we're about to connect
+		connected <- struct{}{}
+
 		caster.Handler.ServeHTTP(postrr, postReq)
 
 		if postrr.Code != http.StatusOK {
 			t.Errorf("error in %q: expected response code %d for POST request, received %d", testName, http.StatusOK, postrr.Code)
 		}
 		done <- true
+	}()
+
+	// Wait for server connection to be ready
+	<-connected
+
+	// Write data after connection is established
+	go func() {
+		w.Write([]byte(data))
+		w.Close()
 	}()
 
 	return done
@@ -174,8 +181,7 @@ func TestAsyncPublishSubscribe(t *testing.T) {
 		caster := ntrip.NewCaster("N/A", ms, logger)
 
 		serverDone := asyncServer(t, tc.TestName, caster, tc.WriteData)
-		// TODO: Better way to wait for POST request to connect - maybe just implement a retry
-		time.Sleep(10 * time.Millisecond)
+		// No need to sleep, asyncServer now signals when it's ready
 
 		getReq, _ := http.NewRequest(http.MethodGet, mock.MountPath, strings.NewReader(""))
 		if tc.NTRIPVersion == 2 {
@@ -195,11 +201,17 @@ func TestAsyncPublishSubscribe(t *testing.T) {
 			t.Errorf("error in %q: response body did not match expected output", tc.TestName)
 		}
 
-		select {
-		case <-serverDone:
-		case <-time.After(1 * time.Second):
-			t.Errorf("%s - timeout waiting for server to close", tc.TestName)
+		// Create a helper function for waiting with better error reporting
+		waitForSignal := func(t *testing.T, ch <-chan bool, timeout time.Duration, message string) {
+			select {
+			case <-ch:
+				// Success, signal received
+			case <-time.After(timeout):
+				t.Fatalf("%s - timeout waiting for %s", tc.TestName, message)
+			}
 		}
+
+		waitForSignal(t, serverDone, 1*time.Second, "server to close")
 	}
 }
 

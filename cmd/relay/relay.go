@@ -2,10 +2,10 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
-	"net/http"
 	"time"
 
 	"github.com/go-gnss/ntrip"
@@ -27,40 +27,77 @@ func main() {
 
 	go serve(*destination, *destUsername, *destPassword, *timeout)
 
-	// Write response body to PipeWriter
-	client, _ := ntrip.NewClientRequest(*source)
-	client.SetBasicAuth(*sourceUsername, *sourcePassword)
+	// Create a properly configured HTTP client
+	client := ntrip.DefaultHTTPClient()
+
 	for ; ; time.Sleep(time.Second * *timeout) {
-		resp, err := http.DefaultClient.Do(client)
+		// Create a context with timeout for each connection attempt
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+
+		// Create a new request with context
+		req, _ := ntrip.NewClientRequestWithContext(ctx, *source)
+		req.SetBasicAuth(*sourceUsername, *sourcePassword)
+
+		// Make the request
+		resp, err := client.Do(req)
 		if err != nil || resp.StatusCode != 200 {
 			fmt.Println("client failed to connect", resp, err)
+			cancel() // Cancel the context
 			continue
 		}
 
 		fmt.Println("client connected")
-		data := make([]byte, 4096)
-		br, err := resp.Body.Read(data)
-		for ; err == nil; br, err = resp.Body.Read(data) {
-			writer.Write(data[:br])
+
+		// Create a buffer pool for efficient memory reuse
+		bufPool := make([]byte, 4096)
+
+		// Copy data from response to writer
+		for {
+			br, err := resp.Body.Read(bufPool)
+			if err != nil {
+				break
+			}
+			if _, err := writer.Write(bufPool[:br]); err != nil {
+				break
+			}
 		}
 
 		fmt.Println("client connection died", err)
+		cancel()          // Cancel the context
+		resp.Body.Close() // Ensure response body is closed
 	}
 }
 
 // Serve whatever is written to the PipeWriter
 func serve(url, username, password string, timeout time.Duration) {
+	// Create a properly configured HTTP client
+	client := ntrip.DefaultHTTPClient()
+
 	for ; ; time.Sleep(time.Second * timeout) {
+		// Create a context with timeout for each connection attempt
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+
 		reader, writer = io.Pipe()
-		req, _ := ntrip.NewServerRequest(url, reader)
+
+		// Create a new request with context
+		req, _ := ntrip.NewServerRequestWithContext(ctx, url, reader)
 		req.SetBasicAuth(username, password)
-		resp, err := http.DefaultClient.Do(req)
+
+		// Make the request
+		resp, err := client.Do(req)
 		if err != nil || resp.StatusCode != 200 {
 			fmt.Println("server failed to connect", resp, err)
+			cancel() // Cancel the context
 			continue
 		}
+
 		fmt.Println("server connected")
+
+		// Read response body until EOF
 		io.ReadAll(resp.Body)
+
 		fmt.Println("server connection died")
+		cancel()          // Cancel the context
+		resp.Body.Close() // Ensure response body is closed
 	}
 }

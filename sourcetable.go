@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/http"
 	"strconv"
 	"strings"
 
@@ -161,39 +160,40 @@ func (m StreamEntry) String() string {
 
 // GetSourcetable fetches a source table from a specific caster.
 //
-// The funciton returns a list of errors which can be treated as warnings.
+// The function returns a list of errors which can be treated as warnings.
 // These warnings indicate that the caster is returning an improper rtcm3 format.
 func GetSourcetable(ctx context.Context, url string) (Sourcetable, []error, error) {
 	warnings := []error{}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	// Create a request using the provided context
+	req, err := NewClientRequestWithContext(ctx, url)
 	if err != nil {
 		return Sourcetable{}, warnings, errors.Wrap(err, "building request")
 	}
 
-	req.Header.Set("Ntrip-Version", "Ntrip/2.0")
-	req.Header.Set("User-Agent", "ntrip-mqtt-gateway")
+	// Use the properly configured client
+	client := DefaultHTTPClient()
 
-	client := &http.Client{}
-
+	// Make the request
 	res, err := client.Do(req)
 	if err != nil {
 		return Sourcetable{}, warnings, err
 	}
 	defer res.Body.Close()
 
+	// Read the response body
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		return Sourcetable{}, warnings, err
 	}
 
 	if res.StatusCode != 200 {
-		return Sourcetable{}, warnings, fmt.Errorf("received a non 200 status code")
+		return Sourcetable{}, warnings, fmt.Errorf("received a non 200 status code: %d", res.StatusCode)
 	}
 
-	// Swollowing the errors here is okay because the errors are more like warnings.
+	// Swallowing the errors here is okay because the errors are more like warnings.
 	// All rows that could be parsed will be present in the source table.
-	table, warnings := ParseSourcetable(string(body[:]))
+	table, warnings := ParseSourcetable(string(body))
 	return table, warnings, nil
 }
 
