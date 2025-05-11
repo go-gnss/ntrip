@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -36,6 +37,263 @@ func (st Sourcetable) String() string {
 
 	stStrs = append(stStrs, "ENDSOURCETABLE\r\n")
 	return strings.Join(stStrs, "\r\n")
+}
+
+// Filter filters the sourcetable based on a query string
+// Format: ?STR;;;;;;DEU&latitude>50.0&bitrate~9600
+func (st Sourcetable) Filter(query string) (Sourcetable, error) {
+	if query == "" {
+		return st, nil
+	}
+
+	result := Sourcetable{
+		Casters:  []CasterEntry{},
+		Networks: []NetworkEntry{},
+		Mounts:   []StreamEntry{},
+	}
+
+	// Parse the query
+	parsedQuery, err := parseQuery(query)
+	if err != nil {
+		return st, err
+	}
+
+	// If no conditions, return the original sourcetable
+	if len(parsedQuery.conditions) == 0 {
+		return st, nil
+	}
+
+	// Filter casters
+	for _, caster := range st.Casters {
+		if parsedQuery.matches(caster) {
+			result.Casters = append(result.Casters, caster)
+		}
+	}
+
+	// Filter networks
+	for _, network := range st.Networks {
+		if parsedQuery.matches(network) {
+			result.Networks = append(result.Networks, network)
+		}
+	}
+
+	// Filter mounts
+	for _, mount := range st.Mounts {
+		if parsedQuery.matches(mount) {
+			result.Mounts = append(result.Mounts, mount)
+		}
+	}
+
+	return result, nil
+}
+
+// query represents a parsed filter query
+type query struct {
+	conditions []condition
+}
+
+// condition represents a single filter condition
+type condition struct {
+	field    string
+	operator string
+	value    string
+}
+
+// parseQuery parses a query string into a query object
+func parseQuery(queryStr string) (query, error) {
+	q := query{conditions: []condition{}}
+
+	if queryStr == "" || !strings.HasPrefix(queryStr, "?") {
+		return q, nil
+	}
+
+	// Remove the leading '?'
+	queryStr = queryStr[1:]
+
+	parts := strings.Split(queryStr, "&")
+	for i, part := range parts {
+		// The first part is special and uses semicolons to separate fields
+		if i == 0 && strings.Contains(part, ";") {
+			fields := strings.Split(part, ";")
+			if len(fields) > 0 && fields[0] != "" {
+				// First field is the entry type (STR, CAS, NET)
+				entryType := fields[0]
+
+				// Add conditions for non-empty fields
+				for j, field := range fields[1:] {
+					if field == "" {
+						continue
+					}
+
+					// Map field index to actual field name based on entry type
+					fieldName := getFieldNameByIndex(entryType, j)
+					if fieldName != "" {
+						q.conditions = append(q.conditions, condition{
+							field:    fieldName,
+							operator: "=",
+							value:    field,
+						})
+					}
+				}
+			}
+		} else {
+			// Regular condition with operator
+			var op string
+			var idx int
+
+			// Check for each operator
+			for _, operator := range []string{"!=", ">=", "<=", "=", ">", "<", "~"} {
+				if i := strings.Index(part, operator); i >= 0 {
+					op = operator
+					idx = i
+					break
+				}
+			}
+
+			if op == "" {
+				return q, fmt.Errorf("invalid condition format: %s", part)
+			}
+
+			field := part[:idx]
+			value := part[idx+len(op):]
+
+			q.conditions = append(q.conditions, condition{
+				field:    field,
+				operator: op,
+				value:    value,
+			})
+		}
+	}
+
+	return q, nil
+}
+
+// getFieldNameByIndex maps field indices to field names based on entry type
+func getFieldNameByIndex(entryType string, index int) string {
+	switch entryType {
+	case "STR":
+		fields := []string{
+			"Name", "Identifier", "Format", "FormatDetails", "Carrier",
+			"NavSystem", "Network", "CountryCode", "Latitude", "Longitude",
+			"NMEA", "Solution", "Generator", "Compression", "Authentication",
+			"Fee", "Bitrate", "Misc",
+		}
+		if index < len(fields) {
+			return fields[index]
+		}
+	case "CAS":
+		fields := []string{
+			"Host", "Port", "Identifier", "Operator", "NMEA",
+			"Country", "Latitude", "Longitude", "FallbackHostAddress", "FallbackHostPort",
+			"Misc",
+		}
+		if index < len(fields) {
+			return fields[index]
+		}
+	case "NET":
+		fields := []string{
+			"Identifier", "Operator", "Authentication", "Fee", "NetworkInfoURL",
+			"StreamInfoURL", "RegistrationAddress", "Misc",
+		}
+		if index < len(fields) {
+			return fields[index]
+		}
+	}
+	return ""
+}
+
+// matches checks if an entry matches the query
+func (q query) matches(entry interface{}) bool {
+	if len(q.conditions) == 0 {
+		return true
+	}
+
+	for _, cond := range q.conditions {
+		if !matchesCondition(entry, cond) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// matchesCondition checks if an entry matches a single condition
+func matchesCondition(entry interface{}, cond condition) bool {
+	val := reflect.ValueOf(entry)
+
+	// If it's a pointer, get the value it points to
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	}
+
+	// Only struct types are supported
+	if val.Kind() != reflect.Struct {
+		return false
+	}
+
+	// Find the field
+	field := val.FieldByName(cond.field)
+	if !field.IsValid() {
+		return false
+	}
+
+	// Convert field value to string for comparison
+	var fieldStr string
+	switch field.Kind() {
+	case reflect.String:
+		fieldStr = field.String()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		fieldStr = strconv.FormatInt(field.Int(), 10)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		fieldStr = strconv.FormatUint(field.Uint(), 10)
+	case reflect.Float32, reflect.Float64:
+		fieldStr = strconv.FormatFloat(field.Float(), 'f', -1, 64)
+	case reflect.Bool:
+		fieldStr = strconv.FormatBool(field.Bool())
+	default:
+		return false
+	}
+
+	// Compare based on operator
+	switch cond.operator {
+	case "=":
+		return fieldStr == cond.value
+	case "!=":
+		return fieldStr != cond.value
+	case "~":
+		return strings.Contains(fieldStr, cond.value)
+	case ">", ">=", "<", "<=":
+		// Parse numbers for comparison
+		fieldVal, err1 := strconv.ParseFloat(fieldStr, 64)
+		condVal, err2 := strconv.ParseFloat(cond.value, 64)
+
+		if err1 != nil || err2 != nil {
+			// Fall back to string comparison if not numeric
+			switch cond.operator {
+			case ">":
+				return fieldStr > cond.value
+			case ">=":
+				return fieldStr >= cond.value
+			case "<":
+				return fieldStr < cond.value
+			case "<=":
+				return fieldStr <= cond.value
+			}
+		}
+
+		switch cond.operator {
+		case ">":
+			return fieldVal > condVal
+		case ">=":
+			return fieldVal >= condVal
+		case "<":
+			return fieldVal < condVal
+		case "<=":
+			return fieldVal <= condVal
+		}
+	}
+
+	return false
 }
 
 // CasterEntry for an NTRIP Sourcetable
