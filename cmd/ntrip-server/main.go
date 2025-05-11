@@ -8,8 +8,10 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/go-gnss/ntrip"
+	"github.com/go-gnss/ntrip/admin"
 	"github.com/go-gnss/ntrip/auth"
 	"github.com/go-gnss/ntrip/internal/inmemory"
 	"github.com/go-gnss/ntrip/rtsp"
@@ -22,7 +24,11 @@ func main() {
 	httpPort := flag.Int("http-port", 2101, "HTTP port for NTRIP v1/v2")
 	rtspPort := flag.Int("rtsp-port", 554, "RTSP port for NTRIP over RTSP")
 	v1SourcePort := flag.Int("v1source-port", 2102, "Port for NTRIP v1 SOURCE requests")
+	adminPort := flag.Int("admin-port", 8080, "Port for admin API")
+	dbPath := flag.String("db-path", "data/ntrip.db", "Path to SQLite database file")
 	logLevel := flag.String("log-level", "info", "Log level (debug, info, warn, error)")
+	tlsCert := flag.String("tls-cert", "", "Path to TLS certificate file for admin API")
+	tlsKey := flag.String("tls-key", "", "Path to TLS certificate key file for admin API")
 	flag.Parse()
 
 	// Set up logger
@@ -36,24 +42,49 @@ func main() {
 	// Create authentication manager
 	authManager := auth.NewAuthManager()
 
-	// Create basic auth for some mounts
-	basicAuth := auth.NewBasicAuth()
-	basicAuth.AddCredential("username", "password")
-
-	// Create digest auth for some mounts
-	digestAuth := auth.NewDigestAuth()
-	digestAuth.AddCredential("username", "password")
-
 	// Create no auth for public mounts
 	noAuth := auth.NewNoAuth()
 
-	// Set up authentication for different mounts
-	authManager.SetMountAuthenticator("SECURE1", basicAuth)
-	authManager.SetMountAuthenticator("SECURE2", digestAuth)
-	authManager.SetMountAuthenticator("PUBLIC1", noAuth)
+	// Create the admin API server first to get access to the database
+	var adminServer *admin.Server
+	var err error
+
+	// Create the admin server with TLS if certificates are provided
+	if *tlsCert != "" && *tlsKey != "" {
+		adminServer, err = admin.NewTLSServer(fmt.Sprintf(":%d", *adminPort), *dbPath, *tlsCert, *tlsKey, logger)
+	} else {
+		adminServer, err = admin.NewServer(fmt.Sprintf(":%d", *adminPort), *dbPath, logger)
+	}
+
+	if err != nil {
+		logger.Fatalf("Failed to create admin server: %v", err)
+	}
+
+	// Create database-backed authenticator
+	dbAuth := auth.NewDBAuth(adminServer.GetDB())
+
+	// Set up authentication for mountpoints
+	// Get all mountpoints from the database
+	mountpoints, err := adminServer.GetDB().ListMountpoints()
+	if err != nil {
+		logger.Warnf("Failed to list mountpoints from database: %v", err)
+		// Continue with empty list if there's an error
+		mountpoints = []admin.Mountpoint{}
+	}
+
+	// Set authenticator for each mountpoint
+	for _, mount := range mountpoints {
+		if mount.Status == "online" {
+			authManager.SetMountAuthenticator(mount.Name, dbAuth)
+			logger.Infof("Set up authentication for mountpoint: %s", mount.Name)
+		}
+	}
 
 	// Set default authenticator
-	authManager.SetDefaultAuthenticator(basicAuth)
+	authManager.SetDefaultAuthenticator(dbAuth)
+
+	// Set up public mounts
+	authManager.SetMountAuthenticator("PUBLIC1", noAuth)
 
 	// Create an authorizer that uses the auth manager
 	authorizer := &AuthManagerAuthorizer{
@@ -165,6 +196,8 @@ func main() {
 	// Create the v1 SOURCE server
 	v1SourceServer := v1source.NewServer(fmt.Sprintf(":%d", *v1SourcePort), svc, logger)
 
+	// Admin API server already created above
+
 	// Start the servers in goroutines
 	go func() {
 		logger.Infof("Starting HTTP caster on port %d", *httpPort)
@@ -187,6 +220,20 @@ func main() {
 		}
 	}()
 
+	go func() {
+		if *tlsCert != "" && *tlsKey != "" {
+			logger.Infof("Starting admin API server with TLS on port %d", *adminPort)
+			if err := adminServer.ListenAndServeTLS(*tlsCert, *tlsKey); err != nil && err != http.ErrServerClosed {
+				logger.Fatalf("Admin API server error: %v", err)
+			}
+		} else {
+			logger.Infof("Starting admin API server on port %d", *adminPort)
+			if err := adminServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				logger.Fatalf("Admin API server error: %v", err)
+			}
+		}
+	}()
+
 	// Wait for interrupt signal
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
@@ -195,8 +242,12 @@ func main() {
 	// Shutdown gracefully
 	logger.Info("Shutting down servers...")
 
+	// Create a context with timeout for shutdown
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	// Close the servers
-	if err := caster.Close(); err != nil {
+	if err := caster.Shutdown(ctx); err != nil {
 		logger.Errorf("Error closing HTTP caster: %v", err)
 	}
 
@@ -208,7 +259,16 @@ func main() {
 		logger.Errorf("Error closing v1 SOURCE server: %v", err)
 	}
 
-	logger.Info("Servers shut down")
+	if err := adminServer.Shutdown(ctx); err != nil {
+		logger.Errorf("Error closing admin API server: %v", err)
+	}
+
+	// Close the admin database
+	if err := adminServer.Close(); err != nil {
+		logger.Errorf("Error closing admin database: %v", err)
+	}
+
+	logger.Info("All servers shut down")
 }
 
 // AuthManagerAuthorizer implements the inmemory.Authoriser interface using the auth.AuthManager
@@ -218,6 +278,15 @@ type AuthManagerAuthorizer struct {
 
 // Authorise implements the inmemory.Authoriser interface
 func (a *AuthManagerAuthorizer) Authorise(action inmemory.Action, mount, username, password string) (bool, error) {
+	// For publish actions, authenticate the mountpoint
+	if action == inmemory.PublishAction {
+		// Use the database authenticator to validate mountpoint credentials
+		if dbAuth, ok := a.AuthManager.GetAuthenticator(mount).(*auth.DBAuth); ok {
+			return dbAuth.AuthenticateMountpoint(mount, password)
+		}
+	}
+
+	// For subscribe actions, authenticate the user
 	// Create a mock request with basic auth
 	req, err := http.NewRequest("GET", "http://example.com/"+mount, nil)
 	if err != nil {
