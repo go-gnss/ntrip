@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  ntrip-client:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.client
+    environment:
+      - NTRIP_URL=http://ntrip-server:2101/MOUNTPOINT
+      - NTRIP_USER=username
+      - NTRIP_PASS=password
+      - OUTPUT_FILE=/data/output.rtcm
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+    # Uncomment to connect to an external network where other NTRIP services might be running
+    # networks:
+    #   - ntrip-network
+
+# Uncomment to create a custom network
+# networks:
+#   ntrip-network:
+#     external: true

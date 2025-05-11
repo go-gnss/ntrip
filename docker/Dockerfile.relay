@@ -1,0 +1,31 @@
+FROM golang:1.24-alpine AS builder
+
+WORKDIR /app
+
+# Copy go.mod and go.sum first to leverage Docker cache
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy the rest of the source code
+COPY . .
+
+# Build the relay application
+RUN go build -o /ntrip-relay ./cmd/relay/relay.go
+
+# Create a minimal runtime image
+FROM alpine:latest
+
+# Install runtime dependencies
+RUN apk add --no-cache ca-certificates tzdata
+
+# Create a non-root user to run the application
+RUN adduser -D -h /app ntrip
+USER ntrip
+WORKDIR /app
+
+# Copy the binary from the builder stage
+COPY --from=builder --chown=ntrip:ntrip /ntrip-relay /app/ntrip-relay
+
+# Set default command
+ENTRYPOINT ["/app/ntrip-relay"]
+CMD ["--source=${SOURCE_URL}", "--suser=${SOURCE_USER}", "--spass=${SOURCE_PASS}", "--dest=${DEST_URL}", "--duser=${DEST_USER}", "--dpass=${DEST_PASS}", "--timeout=${TIMEOUT}"]

@@ -1,0 +1,179 @@
+FROM golang:1.24-alpine AS builder
+
+WORKDIR /app
+
+# Copy go.mod and go.sum first to leverage Docker cache
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy the rest of the source code
+COPY . .
+
+# Build a simple client application
+RUN echo 'package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/go-gnss/ntrip"
+)
+
+func main() {
+	url := flag.String("url", "", "NTRIP caster URL (e.g., http://caster:2101/MOUNTPOINT)")
+	username := flag.String("user", "", "Username for NTRIP caster")
+	password := flag.String("pass", "", "Password for NTRIP caster")
+	outputFile := flag.String("output", "", "Output file path (leave empty for stdout)")
+	flag.Parse()
+
+	// Check required parameters
+	if *url == "" {
+		fmt.Println("Error: URL is required")
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	// Create a context that can be cancelled
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Set up signal handling for graceful shutdown
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		fmt.Println("Received shutdown signal")
+		cancel()
+	}()
+
+	// Create a properly configured HTTP client
+	client := ntrip.DefaultHTTPClient()
+
+	// Create a new request with context
+	req, err := ntrip.NewClientRequestWithContext(ctx, *url)
+	if err != nil {
+		fmt.Printf("Error creating request: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Set authentication if provided
+	if *username != "" {
+		req.SetBasicAuth(*username, *password)
+	}
+
+	// Make the request
+	fmt.Printf("Connecting to %s...\n", *url)
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Printf("Error connecting to NTRIP caster: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		fmt.Printf("Error: Received status code %d\n", resp.StatusCode)
+		os.Exit(1)
+	}
+
+	fmt.Println("Connected successfully")
+
+	// Prepare output
+	var output io.Writer = os.Stdout
+	if *outputFile != "" {
+		file, err := os.Create(*outputFile)
+		if err != nil {
+			fmt.Printf("Error creating output file: %v\n", err)
+			os.Exit(1)
+		}
+		defer file.Close()
+		output = file
+		fmt.Printf("Writing data to %s\n", *outputFile)
+	} else {
+		fmt.Println("Writing data to stdout")
+	}
+
+	// Create a buffer for reading
+	buffer := make([]byte, 4096)
+	var bytesReceived int64
+
+	// Start time for statistics
+	startTime := time.Now()
+	lastReport := startTime
+
+	// Read data until context is cancelled
+	for {
+		select {
+		case <-ctx.Done():
+			duration := time.Since(startTime)
+			fmt.Printf("\nConnection closed. Received %d bytes in %v (%.2f KB/s)\n", 
+				bytesReceived, 
+				duration.Round(time.Second),
+				float64(bytesReceived)/1024.0/duration.Seconds())
+			return
+		default:
+			n, err := resp.Body.Read(buffer)
+			if err != nil {
+				if err == io.EOF {
+					fmt.Println("Connection closed by server")
+				} else {
+					fmt.Printf("Error reading data: %v\n", err)
+				}
+				return
+			}
+
+			if n > 0 {
+				bytesReceived += int64(n)
+				_, err = output.Write(buffer[:n])
+				if err != nil {
+					fmt.Printf("Error writing data: %v\n", err)
+					return
+				}
+
+				// Print statistics every 10 seconds
+				now := time.Now()
+				if now.Sub(lastReport) > 10*time.Second {
+					duration := now.Sub(startTime)
+					fmt.Printf("Received %d bytes in %v (%.2f KB/s)\n", 
+						bytesReceived, 
+						duration.Round(time.Second),
+						float64(bytesReceived)/1024.0/duration.Seconds())
+					lastReport = now
+				}
+			}
+		}
+	}
+}
+' > ./cmd/ntrip-client/main.go
+
+# Create directory if it doesn't exist
+RUN mkdir -p ./cmd/ntrip-client
+
+# Build the client application
+RUN go build -o /ntrip-client ./cmd/ntrip-client/main.go
+
+# Create a minimal runtime image
+FROM alpine:latest
+
+# Install runtime dependencies
+RUN apk add --no-cache ca-certificates tzdata
+
+# Create a non-root user to run the application
+RUN adduser -D -h /app ntrip
+USER ntrip
+WORKDIR /app
+
+# Create data directory
+RUN mkdir -p /app/data
+
+# Copy the binary from the builder stage
+COPY --from=builder --chown=ntrip:ntrip /ntrip-client /app/ntrip-client
+
+# Set default command
+ENTRYPOINT ["/app/ntrip-client"]
+CMD ["--url=${NTRIP_URL}", "--user=${NTRIP_USER}", "--pass=${NTRIP_PASS}", "--output=${OUTPUT_FILE}"]
