@@ -3,7 +3,7 @@ package ntrip
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -182,7 +182,7 @@ func GetSourcetable(ctx context.Context, url string) (Sourcetable, []error, erro
 	}
 	defer res.Body.Close()
 
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		return Sourcetable{}, warnings, err
 	}

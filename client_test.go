@@ -3,7 +3,6 @@ package ntrip_test
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 
 	"github.com/go-gnss/ntrip"
@@ -20,7 +19,7 @@ func ExampleNewClientRequest_sourcetable() {
 		fmt.Printf("received non-200 response code: %d", resp.StatusCode)
 	}
 
-	data, err := ioutil.ReadAll(resp.Body)
+	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		fmt.Println("error reading from response body")
 	}

@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"time"
 
@@ -61,7 +60,7 @@ func serve(url, username, password string, timeout time.Duration) {
 			continue
 		}
 		fmt.Println("server connected")
-		ioutil.ReadAll(resp.Body)
+		io.ReadAll(resp.Body)
 		fmt.Println("server connection died")
 	}
 }
