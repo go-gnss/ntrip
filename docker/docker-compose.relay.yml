@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  ntrip-relay:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.relay
+    environment:
+      - SOURCE_URL=http://source-caster:2101/MOUNTPOINT
+      - SOURCE_USER=username
+      - SOURCE_PASS=password
+      - DEST_URL=http://destination-caster:2101/MOUNTPOINT
+      - DEST_USER=username
+      - DEST_PASS=password
+      - TIMEOUT=2
+    restart: unless-stopped
+    # Uncomment to connect to an external network where other NTRIP services might be running
+    # networks:
+    #   - ntrip-network
+
+# Uncomment to create a custom network
+# networks:
+#   ntrip-network:
+#     external: true

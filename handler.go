@@ -72,8 +72,27 @@ func (h *handler) handleRequestV1(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) handleGetSourcetableV1(w *bufio.ReadWriter, r *http.Request) {
+	// Get the sourcetable
 	st := h.svc.GetSourcetable()
-	_, err := fmt.Fprintf(w, "SOURCETABLE 200 OK\r\nConnection: close\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(st.String()), st)
+
+	// Apply filtering if query parameters are present
+	query := r.URL.RawQuery
+	if query != "" {
+		h.logger.Infof("Filtering sourcetable with query: %s", query)
+		filtered, err := st.Filter(query)
+		if err != nil {
+			h.logger.Warnf("Error filtering sourcetable: %s", err)
+			// Continue with unfiltered sourcetable on error
+		} else {
+			st = filtered
+		}
+	}
+
+	// Convert to string
+	stStr := st.String()
+
+	// Write response
+	_, err := fmt.Fprintf(w, "SOURCETABLE 200 OK\r\nConnection: close\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(stStr), stStr)
 	if err != nil {
 		h.logger.Errorf("error writing sourcetable to client: %s", err)
 		return
@@ -88,8 +107,32 @@ func (h *handler) handleGetSourcetableV1(w *bufio.ReadWriter, r *http.Request) {
 }
 
 func (h *handler) handleGetMountV1(w *bufio.ReadWriter, r *http.Request) {
-	username, password, _ := r.BasicAuth()
-	sub, err := h.svc.Subscriber(r.Context(), r.URL.Path[1:], username, password)
+	// Extract mount point
+	mount := r.URL.Path[1:]
+
+	// Check authentication
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		// No authentication provided
+		h.logger.Infof("No authentication provided for mount: %s", mount)
+		writeStatusV1(w, r, http.StatusUnauthorized)
+		w.Flush()
+		return
+	}
+
+	// Extract username and password from Basic auth
+	username, password, ok := r.BasicAuth()
+	if !ok {
+		// Not Basic auth, could be Digest or Bearer
+		// For now, we only support Basic auth
+		h.logger.Infof("Unsupported authentication method for mount: %s", mount)
+		writeStatusV1(w, r, http.StatusUnauthorized)
+		w.Flush()
+		return
+	}
+
+	// Get subscriber
+	sub, err := h.svc.Subscriber(r.Context(), mount, username, password)
 	if err != nil {
 		h.logger.Infof("connection refused with reason: %s", err)
 		// NTRIP v1 says to return 401 for unauthorized, but sourcetable for any other error - this goes against that
@@ -155,10 +198,28 @@ func (h *handler) handleRequestV2(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) handleGetSourcetableV2(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement sourcetable filtering support
-	st := h.svc.GetSourcetable().String()
-	w.Header().Add("Content-Length", fmt.Sprint(len(st)))
-	_, err := w.Write([]byte(st))
+	// Get the sourcetable
+	st := h.svc.GetSourcetable()
+
+	// Apply filtering if query parameters are present
+	query := r.URL.RawQuery
+	if query != "" {
+		h.logger.Infof("Filtering sourcetable with query: %s", query)
+		filtered, err := st.Filter(query)
+		if err != nil {
+			h.logger.Warnf("Error filtering sourcetable: %s", err)
+			// Continue with unfiltered sourcetable on error
+		} else {
+			st = filtered
+		}
+	}
+
+	// Convert to string
+	stStr := st.String()
+
+	// Set headers and write response
+	w.Header().Add("Content-Length", fmt.Sprint(len(stStr)))
+	_, err := w.Write([]byte(stStr))
 	if err != nil {
 		h.logger.Warnf("error writing sourcetable to client: %s", err)
 		return
@@ -168,8 +229,28 @@ func (h *handler) handleGetSourcetableV2(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *handler) handlePostMountV2(w http.ResponseWriter, r *http.Request) error {
-	username, password, _ := r.BasicAuth()
-	pub, err := h.svc.Publisher(r.Context(), r.URL.Path[1:], username, password)
+	// Extract mount point
+	mount := r.URL.Path[1:]
+
+	// Check authentication
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		// No authentication provided
+		h.logger.Infof("No authentication provided for mount: %s", mount)
+		return ErrorNotAuthorized
+	}
+
+	// Extract username and password from Basic auth
+	username, password, ok := r.BasicAuth()
+	if !ok {
+		// Not Basic auth, could be Digest or Bearer
+		// For now, we only support Basic auth
+		h.logger.Infof("Unsupported authentication method for mount: %s", mount)
+		return ErrorNotAuthorized
+	}
+
+	// Get publisher
+	pub, err := h.svc.Publisher(r.Context(), mount, username, password)
 	if err != nil {
 		h.logger.Infof("connection refused with reason: %s", err)
 		return err
@@ -193,8 +274,28 @@ func (h *handler) handlePostMountV2(w http.ResponseWriter, r *http.Request) erro
 }
 
 func (h *handler) handleGetMountV2(w http.ResponseWriter, r *http.Request) error {
-	username, password, _ := r.BasicAuth()
-	sub, err := h.svc.Subscriber(r.Context(), r.URL.Path[1:], username, password)
+	// Extract mount point
+	mount := r.URL.Path[1:]
+
+	// Check authentication
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		// No authentication provided
+		h.logger.Infof("No authentication provided for mount: %s", mount)
+		return ErrorNotAuthorized
+	}
+
+	// Extract username and password from Basic auth
+	username, password, ok := r.BasicAuth()
+	if !ok {
+		// Not Basic auth, could be Digest or Bearer
+		// For now, we only support Basic auth
+		h.logger.Infof("Unsupported authentication method for mount: %s", mount)
+		return ErrorNotAuthorized
+	}
+
+	// Get subscriber
+	sub, err := h.svc.Subscriber(r.Context(), mount, username, password)
 	if err != nil {
 		h.logger.Infof("connection refused with reason: %s", err)
 		return err
@@ -245,12 +346,21 @@ func write(ctx context.Context, c chan []byte, w io.Writer, flush func() error) 
 func writeStatusV1(w io.Writer, r *http.Request, statusCode int) error {
 	// TODO: Not sure about setting the HTTP version
 	// TODO: Check for errors writing and flushing
+
+	// Determine the authentication type
+	authType := "Basic"
+
+	// Check if the mount point exists in the sourcetable
+	// If it does, use the authentication type specified there
+	// This would require access to the SourceService, which we don't have here
+	// So we'll just use Basic auth for now
+
 	resp := http.Response{
 		StatusCode: statusCode,
 		ProtoMajor: 1,
 		ProtoMinor: 1,
 		Header: map[string][]string{
-			"WWW-Authenticate": {fmt.Sprintf("Basic realm=%q", r.URL.Path)},
+			"WWW-Authenticate": {fmt.Sprintf("%s realm=%q", authType, r.URL.Path)},
 		},
 		Close: true,
 	}

@@ -31,7 +31,7 @@ func (ss *SourceService) GetSourcetable() ntrip.Sourcetable {
 
 func (ss *SourceService) Publisher(ctx context.Context, mount, username, password string) (io.WriteCloser, error) {
 	if auth, err := ss.auth.Authorise(PublishAction, mount, username, password); err != nil {
-		return nil, fmt.Errorf("error in authorisation: %s", err)
+		return nil, fmt.Errorf("authorization failed: %w", err)
 	} else if !auth {
 		return nil, ntrip.ErrorNotAuthorized
 	}
@@ -49,26 +49,51 @@ func (ss *SourceService) Publisher(ctx context.Context, mount, username, passwor
 
 	r, w := io.Pipe()
 
-	// TODO: Read from r, and write to ss.mounts[mount]
+	// Create a buffer pool for efficient memory reuse
+	bufPool := sync.Pool{
+		New: func() any { return make([]byte, 4096) },
+	}
+
+	// Read from r, and write to ss.mounts[mount]
 	go func() {
-		for {
-			// Read
-			buf := make([]byte, 1024)
-			br, err := r.Read(buf)
-			if err != nil {
-				// Remove self from mounts map if Reader closes
-				delete(ss.mounts, mount)
-				return
-			}
-			// Write
+		defer func() {
+			// Clean up when goroutine exits
 			ss.Lock()
-			for i, w := range ss.mounts[mount] {
-				if _, err := w.Write(buf[:br]); err != nil {
-					// Re-slice to remove closed Writer
-					ss.mounts[mount] = append(ss.mounts[mount][:i], ss.mounts[mount][i+1:]...)
-				}
-			}
+			delete(ss.mounts, mount)
 			ss.Unlock()
+		}()
+
+		for {
+			select {
+			case <-ctx.Done():
+				// Context cancelled, exit goroutine
+				return
+			default:
+				// Get a buffer from the pool
+				buf := bufPool.Get().([]byte)
+				br, err := r.Read(buf)
+				if err != nil {
+					// Return buffer to pool and exit if reader is closed
+					bufPool.Put(buf)
+					return
+				}
+
+				// Write to all subscribers
+				ss.Lock()
+				var activeWriters []io.Writer
+				for _, writer := range ss.mounts[mount] {
+					if _, err := writer.Write(buf[:br]); err == nil {
+						// Keep only active writers
+						activeWriters = append(activeWriters, writer)
+					}
+				}
+				// Replace with only active writers
+				ss.mounts[mount] = activeWriters
+				ss.Unlock()
+
+				// Return buffer to pool
+				bufPool.Put(buf)
+			}
 		}
 	}()
 
@@ -77,7 +102,7 @@ func (ss *SourceService) Publisher(ctx context.Context, mount, username, passwor
 
 func (ss *SourceService) Subscriber(ctx context.Context, mount, username, password string) (chan []byte, error) {
 	if auth, err := ss.auth.Authorise(SubscribeAction, mount, username, password); err != nil {
-		return nil, fmt.Errorf("error in authorisation: %s", err)
+		return nil, fmt.Errorf("authorization failed: %w", err)
 	} else if !auth {
 		return nil, ntrip.ErrorNotAuthorized
 	}
@@ -93,23 +118,53 @@ func (ss *SourceService) Subscriber(ctx context.Context, mount, username, passwo
 	r, w := io.Pipe()
 	ss.mounts[mount] = append(mw, w)
 
+	// Create a buffer pool for efficient memory reuse
+	bufPool := sync.Pool{
+		New: func() any { return make([]byte, 4096) },
+	}
+
+	// Create a buffered channel for data
+	data := make(chan []byte, 8)
+
 	// Cleanup when client closes connection
 	go func() {
 		<-ctx.Done()
 		w.Close()
 	}()
 
-	data := make(chan []byte, 1)
 	// Read from r and write to data channel
 	go func() {
+		defer close(data) // Close channel when done
+
 		for {
-			buf := make([]byte, 1024)
-			br, err := r.Read(buf)
-			if err != nil {
-				// Server closed connection
+			select {
+			case <-ctx.Done():
 				return
+			default:
+				// Get buffer from pool
+				buf := bufPool.Get().([]byte)
+				br, err := r.Read(buf)
+				if err != nil {
+					// Return buffer to pool and exit if reader is closed
+					bufPool.Put(buf)
+					return
+				}
+
+				// Create a copy of the data to send through the channel
+				// This is necessary because we're returning the buffer to the pool
+				dataCopy := make([]byte, br)
+				copy(dataCopy, buf[:br])
+
+				// Return buffer to pool
+				bufPool.Put(buf)
+
+				// Send data to channel, with context cancellation support
+				select {
+				case data <- dataCopy:
+				case <-ctx.Done():
+					return
+				}
 			}
-			data <- buf[:br]
 		}
 	}()
 

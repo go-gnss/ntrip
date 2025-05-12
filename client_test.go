@@ -1,17 +1,26 @@
 package ntrip_test
 
 import (
+	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
+	"time"
 
 	"github.com/go-gnss/ntrip"
 )
 
 func ExampleNewClientRequest_sourcetable() {
-	req, _ := ntrip.NewClientRequest("https://ntrip.data.gnss.ga.gov.au")
-	resp, err := http.DefaultClient.Do(req)
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Use context-aware request
+	req, _ := ntrip.NewClientRequestWithContext(ctx, "https://ntrip.data.gnss.ga.gov.au")
+
+	// Use properly configured client
+	client := ntrip.DefaultHTTPClient()
+	resp, err := client.Do(req)
 	if err != nil {
 		fmt.Printf("error making NTRIP request: %s", err)
 	}
@@ -20,7 +29,7 @@ func ExampleNewClientRequest_sourcetable() {
 		fmt.Printf("received non-200 response code: %d", resp.StatusCode)
 	}
 
-	data, err := ioutil.ReadAll(resp.Body)
+	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		fmt.Println("error reading from response body")
 	}
@@ -30,8 +39,16 @@ func ExampleNewClientRequest_sourcetable() {
 }
 
 func ExampleNewClientRequest() {
-	req, _ := ntrip.NewClientRequest("http://hostname:2101/mountpoint")
-	resp, err := http.DefaultClient.Do(req)
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Use context-aware request
+	req, _ := ntrip.NewClientRequestWithContext(ctx, "http://hostname:2101/mountpoint")
+
+	// Use properly configured client
+	client := ntrip.DefaultHTTPClient()
+	resp, err := client.Do(req)
 	if err != nil {
 		fmt.Printf("error making NTRIP request: %s", err)
 	}
@@ -44,10 +61,18 @@ func ExampleNewClientRequest() {
 }
 
 func ExampleNewServerRequest() {
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	r, w := io.Pipe()
 
-	req, _ := ntrip.NewServerRequest("http://hostname:2101/mountpoint", r)
-	resp, err := http.DefaultClient.Do(req)
+	// Use context-aware request
+	req, _ := ntrip.NewServerRequestWithContext(ctx, "http://hostname:2101/mountpoint", r)
+
+	// Use properly configured client
+	client := ntrip.DefaultHTTPClient()
+	resp, err := client.Do(req)
 	if err != nil {
 		fmt.Printf("error making NTRIP request: %s", err)
 	}

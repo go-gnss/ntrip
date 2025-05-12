@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  ntrip-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "2101:2101"  # NTRIP HTTP port
+      - "554:554"    # RTSP port
+      - "2102:2102"  # NTRIP v1 SOURCE port
+      - "8080:8080"  # Admin API port
+    volumes:
+      - ntrip-data:/app/data
+      - ./certs:/app/certs:ro  # Optional: Mount TLS certificates
+    environment:
+      - LOG_LEVEL=info
+      - ADMIN_API_KEY=${ADMIN_API_KEY:-change_this_to_a_secure_random_key}  # Required for admin API authentication
+    command: >
+      --http-port=2101
+      --rtsp-port=554
+      --v1source-port=2102
+      --admin-port=8080
+      --db-path=/app/data/ntrip.db
+      --log-level=${LOG_LEVEL:-info}
+      # Uncomment the following lines to enable TLS for the admin API
+      # --tls-cert=/app/certs/cert.pem
+      # --tls-key=/app/certs/key.pem
+    restart: unless-stopped
+
+volumes:
+  ntrip-data:
+    # This volume persists the SQLite database
