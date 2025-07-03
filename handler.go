@@ -5,8 +5,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/sirupsen/logrus"
 )
@@ -14,7 +16,7 @@ import (
 // handler is used by Caster, and is an instance of a request being handled with methods
 // for handing v1 and v2 requests
 // TODO: Better name - the http.Handler constructs this and uses it's methods for handling
-//  requests (so the word "handle" is a bit overloaded)
+// requests (so the word "handle" is a bit overloaded)
 // TODO: Separate package (in internal)?
 type handler struct {
 	svc    SourceService
@@ -65,13 +67,13 @@ func (h *handler) handleRequestV1(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		h.handleGetMountV1(rw, r)
+		h.handleGetMountV1(rw, r, conn)
 	default:
 		w.WriteHeader(http.StatusNotImplemented)
 	}
 }
 
-func (h *handler) handleGetSourcetableV1(w *bufio.ReadWriter, r *http.Request) {
+func (h *handler) handleGetSourcetableV1(w *bufio.ReadWriter, _ *http.Request) {
 	st := h.svc.GetSourcetable()
 	_, err := fmt.Fprintf(w, "SOURCETABLE 200 OK\r\nConnection: close\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(st.String()), st)
 	if err != nil {
@@ -87,7 +89,7 @@ func (h *handler) handleGetSourcetableV1(w *bufio.ReadWriter, r *http.Request) {
 	h.logger.Info("sourcetable written to client")
 }
 
-func (h *handler) handleGetMountV1(w *bufio.ReadWriter, r *http.Request) {
+func (h *handler) handleGetMountV1(w *bufio.ReadWriter, r *http.Request, conn net.Conn) {
 	username, password, _ := r.BasicAuth()
 	sub, err := h.svc.Subscriber(r.Context(), r.URL.Path[1:], username, password)
 	if err != nil {
@@ -115,7 +117,7 @@ func (h *handler) handleGetMountV1(w *bufio.ReadWriter, r *http.Request) {
 	}
 	h.logger.Infof("accepted request")
 
-	err = write(r.Context(), sub, w, w.Flush)
+	err = write(r.Context(), sub, w, w.Flush, conn)
 	h.logger.Infof("connection closed with reason: %s", err)
 }
 
@@ -154,7 +156,7 @@ func (h *handler) handleRequestV2(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *handler) handleGetSourcetableV2(w http.ResponseWriter, r *http.Request) {
+func (h *handler) handleGetSourcetableV2(w http.ResponseWriter, _ *http.Request) {
 	// TODO: Implement sourcetable filtering support
 	st := h.svc.GetSourcetable().String()
 	w.Header().Add("Content-Length", fmt.Sprint(len(st)))
@@ -202,41 +204,45 @@ func (h *handler) handleGetMountV2(w http.ResponseWriter, r *http.Request) error
 
 	w.Header().Add("Content-Type", "gnss/data")
 	// Flush response headers before sending data to client, default status code is 200
-	// TODO: Don't necessarily need to do this, since the first data written to client will flush
 	w.(http.Flusher).Flush()
 	h.logger.Infof("accepted request")
 
-	// bufio.ReadWriter's Flush method (used by v1 handler) returns error so does not satisfy the
-	// http.Flusher interface
-	flush := func() error {
-		// TODO: Check if cast succeeds and return error if not
-		w.(http.Flusher).Flush()
-		return nil
-	}
+	rc := http.NewResponseController(w)
 
-	err = write(r.Context(), sub, w, flush)
+	err = write(r.Context(), sub, w, rc.Flush, rc)
 	// Duplicating connection closed message here to avoid superfluous calls to WriteHeader
 	h.logger.Infof("connection closed with reason: %s", err)
 	return nil
 }
 
+// interface for the different methods of setting a write deadline
+type writeDeadliner interface {
+	SetWriteDeadline(time.Time) error
+}
+
 // Used by the GET handlers to read data from Subscriber channel and write to client writer
-// TODO: Better name
-func write(ctx context.Context, c chan []byte, w io.Writer, flush func() error) error {
+func write(ctx context.Context, c chan []byte, w io.Writer, flush func() error, d writeDeadliner) error {
 	for {
 		select {
 		case data, ok := <-c:
 			if !ok {
 				return fmt.Errorf("subscriber channel closed")
 			}
+
+			if err := d.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
+				return fmt.Errorf("error setting write deadline: %w", err)
+			}
+
 			if _, err := w.Write(data); err != nil {
-				return err
+				return fmt.Errorf("error writing: %w", err)
 			}
+
 			if err := flush(); err != nil {
-				return err
+				return fmt.Errorf("error flushing: %w", err)
 			}
+
 		case <-ctx.Done():
-			return fmt.Errorf("client disconnect")
+			return fmt.Errorf("client disconnect: %w", ctx.Err())
 		}
 	}
 }

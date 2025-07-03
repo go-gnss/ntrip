@@ -30,21 +30,18 @@ type Caster struct {
 
 // NewCaster constructs a Caster, setting up the Handler and timeouts - run using ListenAndServe()
 // TODO: Consider not constructing the http.Server, and leaving Caster as a http.Handler
-//  Then the caller can create other routes on the server, such as (for example) a /health endpoint,
-//  or a /stats endpoint - Though those could instead be run on separate http.Server's
-//  Also, middleware can be added to a Caster by doing `c.Handler = someMiddleware(c.Handler)`
+// Then the caller can create other routes on the server, such as (for example) a /health endpoint,
+// or a /stats endpoint - Though those could instead be run on separate http.Server's
+// Also, middleware can be added to a Caster by doing `c.Handler = someMiddleware(c.Handler)`
 func NewCaster(addr string, svc SourceService, logger logrus.FieldLogger) *Caster {
 	return &Caster{
 		http.Server{
-			Addr:        addr,
-			Handler:     getHandler(svc, logger),
-			IdleTimeout: 10 * time.Second,
-			// Read timeout kills publishing connections because they don't necessarily read from
-			// the response body
-			//ReadTimeout: 10 * time.Second,
-			// Write timeout kills subscriber connections because they don't write to the request
-			// body
-			//WriteTimeout: 10 * time.Second,
+			Addr:              addr,
+			Handler:           getHandler(svc, logger),
+			IdleTimeout:       10 * time.Second,
+			ReadHeaderTimeout: 10 * time.Second,
+			// Read and Write timeouts are controlled by the Handler functions due to NTRIP requests
+			// being long-lived
 		},
 	}
 }
