@@ -40,7 +40,6 @@ func NewCaster(addr string, svc SourceService, logger logrus.FieldLogger) *Caste
 			Handler:           getHandler(svc, logger),
 			IdleTimeout:       10 * time.Second,
 			ReadHeaderTimeout: 10 * time.Second,
-			WriteTimeout:      10 * time.Second,
 		},
 	}
 }

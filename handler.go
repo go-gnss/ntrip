@@ -5,17 +5,16 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/sirupsen/logrus"
 )
 
 // handler is used by Caster, and is an instance of a request being handled with methods
 // for handing v1 and v2 requests
-// TODO: Better name - the http.Handler constructs this and uses it's methods for handling
-//  requests (so the word "handle" is a bit overloaded)
-// TODO: Separate package (in internal)?
 type handler struct {
 	svc    SourceService
 	logger logrus.FieldLogger
@@ -32,6 +31,23 @@ func (h *handler) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// hijackedResponseWriter gives access to an http ResponseWriter's underlying net.Conn which
+// is needed for NTRIP v1 requests, and used when writing to v1 and v2 clients
+type hijackedResponseWriter struct {
+	conn net.Conn
+	rw   *bufio.ReadWriter
+}
+
+func hijackResponseWriter(w http.ResponseWriter) (hrw hijackedResponseWriter, err error) {
+	hj, ok := w.(http.Hijacker)
+	if !ok {
+		return hrw, fmt.Errorf("server does not implement hijackable response writers")
+	}
+
+	conn, rw, err := hj.Hijack()
+	return hijackedResponseWriter{conn, rw}, err
+}
+
 // NTRIP v1 is not valid HTTP, so the underlying socket must be hijacked from the HTTP library
 // Would need to use net.Listen instead of http.Server to support v1 SOURCE requests
 func (h *handler) handleRequestV1(w http.ResponseWriter, r *http.Request) {
@@ -42,44 +58,35 @@ func (h *handler) handleRequestV1(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Extract underlying net.Conn from ResponseWriter
-	hj, ok := w.(http.Hijacker)
-	if !ok {
-		h.logger.Error("server does not implement hijackable response writers, cannot support NTRIP v1")
-		// There is no NTRIP v1 response to signal failure, so this is probably the most useful
-		http.Error(w, "", http.StatusInternalServerError)
-		return
-	}
-
-	conn, rw, err := hj.Hijack()
+	hrw, err := hijackResponseWriter(w)
 	if err != nil {
-		h.logger.Errorf("error hijacking HTTP response writer: %s", err)
 		w.WriteHeader(http.StatusInternalServerError)
-		return
+		h.logger.Errorf("error hijacking HTTP response writer: %w", err)
 	}
-	defer conn.Close()
+	defer hrw.conn.Close()
 
 	if r.URL.Path == "/" {
-		h.handleGetSourcetableV1(rw, r)
+		h.handleGetSourcetableV1(hrw, r)
 		return
 	}
 
 	switch r.Method {
 	case http.MethodGet:
-		h.handleGetMountV1(rw, r)
+		h.handleGetMountV1(hrw, r)
 	default:
 		w.WriteHeader(http.StatusNotImplemented)
 	}
 }
 
-func (h *handler) handleGetSourcetableV1(w *bufio.ReadWriter, r *http.Request) {
+func (h *handler) handleGetSourcetableV1(hrw hijackedResponseWriter, _ *http.Request) {
 	st := h.svc.GetSourcetable()
-	_, err := fmt.Fprintf(w, "SOURCETABLE 200 OK\r\nConnection: close\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(st.String()), st)
+	_, err := fmt.Fprintf(hrw.rw, "SOURCETABLE 200 OK\r\nConnection: close\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(st.String()), st)
 	if err != nil {
-		h.logger.Errorf("error writing sourcetable to client: %s", err)
+		h.logger.Errorf("error writing sourcetable to client: %w", err)
 		return
 	}
 
-	if err = w.Flush(); err != nil {
+	if err = hrw.rw.Flush(); err != nil {
 		h.logger.Warnf("error flushing data to client: %s", err)
 		return
 	}
@@ -87,35 +94,35 @@ func (h *handler) handleGetSourcetableV1(w *bufio.ReadWriter, r *http.Request) {
 	h.logger.Info("sourcetable written to client")
 }
 
-func (h *handler) handleGetMountV1(w *bufio.ReadWriter, r *http.Request) {
+func (h *handler) handleGetMountV1(hrw hijackedResponseWriter, r *http.Request) {
 	username, password, _ := r.BasicAuth()
 	sub, err := h.svc.Subscriber(r.Context(), r.URL.Path[1:], username, password)
 	if err != nil {
 		h.logger.Infof("connection refused with reason: %s", err)
 		// NTRIP v1 says to return 401 for unauthorized, but sourcetable for any other error - this goes against that
 		if err == ErrorNotAuthorized {
-			writeStatusV1(w, r, http.StatusUnauthorized)
+			writeStatusV1(hrw.rw, r, http.StatusUnauthorized)
 		} else if err == ErrorNotFound {
-			writeStatusV1(w, r, http.StatusNotFound)
+			writeStatusV1(hrw.rw, r, http.StatusNotFound)
 		} else {
-			writeStatusV1(w, r, http.StatusInternalServerError)
+			writeStatusV1(hrw.rw, r, http.StatusInternalServerError)
 		}
-		w.Flush()
+		hrw.rw.Flush()
 		return
 	}
 
-	_, err = w.Write([]byte("ICY 200 OK\r\n")) // NTRIP v1 is ICECAST, this is the equivalent of HTTP 200 OK
+	_, err = hrw.rw.Write([]byte("ICY 200 OK\r\n")) // NTRIP v1 is ICECAST, this is the equivalent of HTTP 200 OK
 	if err != nil {
 		h.logger.WithError(err).Error("failed to write response headers")
 		return
 	}
-	if err := w.Flush(); err != nil {
+	if err := hrw.rw.Flush(); err != nil {
 		h.logger.WithError(err).Error("error flushing response headers")
 		return
 	}
 	h.logger.Infof("accepted request")
 
-	err = write(r.Context(), sub, w, w.Flush)
+	err = write(r.Context(), sub, hrw)
 	h.logger.Infof("connection closed with reason: %s", err)
 }
 
@@ -154,7 +161,7 @@ func (h *handler) handleRequestV2(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *handler) handleGetSourcetableV2(w http.ResponseWriter, r *http.Request) {
+func (h *handler) handleGetSourcetableV2(w http.ResponseWriter, _ *http.Request) {
 	// TODO: Implement sourcetable filtering support
 	st := h.svc.GetSourcetable().String()
 	w.Header().Add("Content-Length", fmt.Sprint(len(st)))
@@ -206,37 +213,42 @@ func (h *handler) handleGetMountV2(w http.ResponseWriter, r *http.Request) error
 	w.(http.Flusher).Flush()
 	h.logger.Infof("accepted request")
 
-	// bufio.ReadWriter's Flush method (used by v1 handler) returns error so does not satisfy the
-	// http.Flusher interface
-	flush := func() error {
-		// TODO: Check if cast succeeds and return error if not
-		w.(http.Flusher).Flush()
-		return nil
+	hrw, err := hijackResponseWriter(w)
+	if err != nil {
+		h.logger.Errorf("error hijacking HTTP response writer: %w", err)
+		return err
 	}
+	defer hrw.conn.Close()
 
-	err = write(r.Context(), sub, w, flush)
+	err = write(r.Context(), sub, hrw)
 	// Duplicating connection closed message here to avoid superfluous calls to WriteHeader
 	h.logger.Infof("connection closed with reason: %s", err)
 	return nil
 }
 
 // Used by the GET handlers to read data from Subscriber channel and write to client writer
-// TODO: Better name
-func write(ctx context.Context, c chan []byte, w io.Writer, flush func() error) error {
+func write(ctx context.Context, c chan []byte, hrw hijackedResponseWriter) error {
 	for {
 		select {
 		case data, ok := <-c:
 			if !ok {
 				return fmt.Errorf("subscriber channel closed")
 			}
-			if _, err := w.Write(data); err != nil {
-				return err
+
+			if err := hrw.conn.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
+				return fmt.Errorf("failed to set write deadline: %w", err)
 			}
-			if err := flush(); err != nil {
-				return err
+
+			if _, err := hrw.rw.Write(data); err != nil {
+				return fmt.Errorf("write failed: %w", err)
 			}
+
+			if err := hrw.rw.Flush(); err != nil {
+				return fmt.Errorf("flush failed: %w", err)
+			}
+
 		case <-ctx.Done():
-			return fmt.Errorf("client disconnect")
+			return fmt.Errorf("client disconnected or timed out: %w", ctx.Err())
 		}
 	}
 }
