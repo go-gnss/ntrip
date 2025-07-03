@@ -2,9 +2,9 @@ package ntrip_test
 
 import (
 	"bufio"
+	"crypto/rand"
 	"fmt"
 	"io"
-	"math/rand"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -29,7 +29,8 @@ func init() {
 // interface which is needed to test NTRIP v1 requests
 // TODO: Move to another package?
 // TODO: This doesn't prevent the server from writing to the original response Body, which
-//  http.Server would do for a real request - this case is tested by caster_test.go
+//
+//	http.Server would do for a real request - this case is tested by caster_test.go
 type HijackableResponseRecorder struct {
 	*httptest.ResponseRecorder
 }
@@ -38,6 +39,10 @@ func (h *HijackableResponseRecorder) Hijack() (net.Conn, *bufio.ReadWriter, erro
 	_, conn := net.Pipe()
 	rw := bufio.NewReadWriter(bufio.NewReader(h.Body), bufio.NewWriter(h.Body))
 	return conn, rw, nil
+}
+
+func (h *HijackableResponseRecorder) SetWriteDeadline(time.Time) error {
+	return nil
 }
 
 func TestCasterHandlers(t *testing.T) {
