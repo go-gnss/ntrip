@@ -94,14 +94,17 @@ func (h *handler) handleGetMountV1(w *bufio.ReadWriter, r *http.Request, conn ne
 	sub, err := h.svc.Subscriber(r.Context(), r.URL.Path[1:], username, password)
 	if err != nil {
 		h.logger.Infof("connection refused with reason: %s", err)
-		// NTRIP v1 says to return 401 for unauthorized, but sourcetable for any other error - this goes against that
-		if err == ErrorNotAuthorized {
+		// NTRIP v1 says to return 401 for unauthorized, but sourcetable for any other error
+		// this goes against that by returning InternalServerError
+		switch err {
+		case ErrorNotAuthorized:
 			writeStatusV1(w, r, http.StatusUnauthorized)
-		} else if err == ErrorNotFound {
+		case ErrorNotFound:
 			writeStatusV1(w, r, http.StatusNotFound)
-		} else {
+		default:
 			writeStatusV1(w, r, http.StatusInternalServerError)
 		}
+
 		w.Flush()
 		return
 	}
@@ -116,6 +119,8 @@ func (h *handler) handleGetMountV1(w *bufio.ReadWriter, r *http.Request, conn ne
 		return
 	}
 	h.logger.Infof("accepted request")
+
+	go drainReader(conn)
 
 	err = write(r.Context(), sub, w, w.Flush, conn)
 	h.logger.Infof("connection closed with reason: %s", err)
@@ -209,10 +214,20 @@ func (h *handler) handleGetMountV2(w http.ResponseWriter, r *http.Request) error
 
 	rc := http.NewResponseController(w)
 
+	go drainReader(r.Body)
+
 	err = write(r.Context(), sub, w, rc.Flush, rc)
 	// Duplicating connection closed message here to avoid superfluous calls to WriteHeader
 	h.logger.Infof("connection closed with reason: %s", err)
 	return nil
+}
+
+// drainReader discards received data from GET request clients to prevent client writes from
+// filling TCP receive queues
+// NTRIP specification states that clients may send NMEA messages at any time in the request body
+// these messages are ignored in this implementation
+func drainReader(r io.Reader) {
+	io.Copy(io.Discard, r)
 }
 
 // interface for the different methods of setting a write deadline
