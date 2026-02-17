@@ -220,7 +220,7 @@ func TestGetSourcetable(t *testing.T) {
 		`
 
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, table)
+		fmt.Fprint(w, table)
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(handler))
